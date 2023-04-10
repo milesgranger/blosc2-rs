@@ -20,6 +20,7 @@ fn main() {
     let out = PathBuf::from(&(format!("{}/src/ffi.rs", env!("CARGO_MANIFEST_DIR"))));
     bindgen::Builder::default()
         .header(&format!("{}/include/blosc2.h", lib.display()))
+        .clang_arg("-fPIE")
         .derive_default(true)
         .derive_copy(true)
         .derive_debug(true)

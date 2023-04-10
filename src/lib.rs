@@ -83,9 +83,9 @@ impl Default for CLevel {
 // }
 
 pub mod read {
-    /// NOTE: These De/compressors are different from the blosc2 schunk. There are no frames, meta
-    /// layers, etc. It's _only_ meant for one or more independently compressed blocks. No more, no
-    /// less. If you're wanting `schunk` then hop over to the `crate::schunk` module(s).
+    ///! NOTE: These De/compressors are different from the blosc2 schunk. There are no frames, meta
+    ///! layers, etc. It's _only_ meant for one or more independently compressed blocks. No more, no
+    ///! less. If you're wanting `schunk` then hop over to the `crate::schunk` module(s).
     use super::*;
 
     pub struct Decompressor<R: std::io::Read> {

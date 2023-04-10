@@ -3,6 +3,7 @@ use std::path::PathBuf;
 fn main() {
     let lib = cmake::Config::new("c-blosc2")
         .define("CMAKE_POSITION_INDEPENDENT_CODE", "ON")
+        .define("CMAKE_C_FLAGS", "-fPIE")
         .define("BLOSC_INSTALL", "ON")
         .define("BUILD_TESTS", "OFF")
         .define("BUILD_EXAMPLES", "OFF")

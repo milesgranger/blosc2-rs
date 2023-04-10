@@ -36,6 +36,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: "x86_64-pc-windows-gnu"
+      - name: Set up MinGW
+        uses: egor-tensin/setup-mingw@v2
+        with:
+          platform: x64
       - name: Build
         run: cargo build --target x86_64-pc-windows-gnu
       - name: Test

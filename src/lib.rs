@@ -64,21 +64,228 @@ impl Default for CLevel {
     }
 }
 
-// pub mod schunk {
-//     use super::*;
+pub mod schunk {
+    use std::ffi::CStr;
+    use std::path::PathBuf;
 
-//     use super::*;
+    use super::*;
 
-//     pub struct Storage(ffi::blosc2_storage);
+    #[derive(Default)]
+    pub struct Storage(ffi::blosc2_storage);
 
-//     pub struct SChunk(ffi::blosc2_schunk);
+    impl Storage {
+        pub fn set_urlpath<S: ToString>(mut self, urlpath: S) -> Result<Self> {
+            self.0.urlpath = CString::new(urlpath.to_string())?.into_raw();
+            Ok(self)
+        }
+        pub fn set_contiguous(mut self, contiguous: bool) -> Self {
+            self.0.contiguous = contiguous;
+            self
+        }
+        pub fn set_cparams(mut self, cparams: &mut CParams) -> Self {
+            self.0.cparams = &mut cparams.0;
+            self
+        }
+        pub fn set_dparams(mut self, dparams: &mut DParams) -> Self {
+            self.0.dparams = &mut dparams.0;
+            self
+        }
+    }
 
-//     impl SChunk {
-//         pub fn new() -> Self {
-//             ffi::blosc2_schunk_new()
-//         }
-//     }
-// }
+    pub struct SChunk(pub(crate) *mut ffi::blosc2_schunk);
+
+    // Loosely inspired by blosc2-python implementation
+    impl SChunk {
+        pub fn new(storage: Storage) -> Self {
+            let mut storage = storage;
+            let schunk = unsafe { ffi::blosc2_schunk_new(&mut storage.0) };
+            Self(schunk)
+        }
+
+        #[inline]
+        pub(crate) fn inner(&self) -> &ffi::blosc2_schunk {
+            unsafe { &(*self.0) }
+        }
+
+        #[inline]
+        pub(crate) fn inner_mut(&mut self) -> &mut ffi::blosc2_schunk {
+            unsafe { &mut (*self.0) }
+        }
+
+        /// Append data to SChunk, returning new number of chunks
+        pub fn append_data<T>(&mut self, data: &[T]) -> Result<usize> {
+            let n = unsafe {
+                ffi::blosc2_schunk_append_buffer(self.0, data.as_ptr() as _, data.len() as _)
+            };
+            if n < 0 {
+                return Err(format!("Could not append buffer, return code '{}'", n).into());
+            }
+            Ok(n as _)
+        }
+
+        /// Decompress a chunk, returning number of bytes written to output buffer
+        pub fn decompress_chunk<T>(&mut self, nchunk: usize, dst: &mut [T]) -> Result<usize> {
+            let mut chunk = std::ptr::null_mut();
+            let mut needs_free: bool = false;
+            let mut rc = unsafe {
+                ffi::blosc2_schunk_get_chunk(
+                    self.0,
+                    nchunk as _,
+                    &mut chunk as *mut *mut u8,
+                    &mut needs_free as *mut bool,
+                )
+            };
+            if rc < 0 {
+                return Err(format!("Failed to get chunk {}, exit code: '{}'", nchunk, rc).into());
+            }
+            let mut nbytes = 0;
+            let mut cbytes = 0;
+            let mut blocksize = 0;
+            rc = unsafe {
+                ffi::blosc2_cbuffer_sizes(chunk as _, &mut nbytes, &mut cbytes, &mut blocksize)
+            };
+            if needs_free {
+                unsafe { ffi::free(chunk as _) };
+            }
+            if rc < 0 {
+                return Err(format!("Failed to get cbuffer sizes, return code '{}'", rc).into());
+            }
+            if dst.len() < nbytes as usize {
+                return Err(format!(
+                    "Output buffer not large enough, need {} but length is {}",
+                    nbytes,
+                    dst.len()
+                )
+                .into());
+            }
+            let size = unsafe {
+                ffi::blosc2_schunk_decompress_chunk(
+                    self.0,
+                    nchunk as _,
+                    dst.as_mut_ptr() as _,
+                    nbytes,
+                )
+            };
+            if size < 0 {
+                return Err(format!(
+                    "Unable to decompress chunk '{}', exit code: {}",
+                    nchunk, size
+                )
+                .into());
+            } else if size == 0 {
+                return Err(format!(
+                    "Non-initialized error when decompressing chunk '{}'",
+                    nchunk
+                )
+                .into());
+            } else {
+                Ok(size as _)
+            }
+        }
+
+        pub fn into_vec(self) -> Result<Vec<u8>> {
+            let mut needs_free = false;
+            let mut buf = Vec::with_capacity(unsafe { (*self.0).nbytes } as usize);
+            let len = unsafe {
+                ffi::blosc2_schunk_to_buffer(self.0, &mut buf.as_mut_ptr() as _, &mut needs_free)
+            };
+            if len < 0 {
+                return Err(format!("Failed to convert to buffer, return code '{}'", len).into());
+            } else {
+                unsafe { buf.set_len(len as _) };
+            }
+            buf.shrink_to_fit();
+            if !needs_free {
+                Ok(buf.clone())
+            } else {
+                Ok(buf)
+            }
+        }
+
+        /// Create a Schunk from an owned `Vec<u8>`. Data will be owned by the Schunk and released
+        /// via normal Rust semantics.
+        pub fn from_vec(buf: Vec<u8>) -> Result<Self> {
+            let mut buf = buf;
+            let schunk =
+                unsafe { ffi::blosc2_schunk_from_buffer(buf.as_mut_ptr(), buf.len() as _, false) };
+
+            // copy is false, schunk/blosc2 takes ownership, and set that it'll be responsible to free it
+            std::mem::forget(buf);
+            unsafe { ffi::blosc2_schunk_avoid_cframe_free(schunk, false) };
+            Ok(Self(schunk))
+        }
+
+        /// Create a Schunk from a slice. The data _will not be copied_ but the slice used as the
+        /// underlying schunk cframe.
+        pub fn from_slice(buf: &mut [u8]) -> Result<Self> {
+            // schunk is a view of the slice, so copy is false and set to avoid freeing the buffer
+            let schunk =
+                unsafe { ffi::blosc2_schunk_from_buffer(buf.as_mut_ptr(), buf.len() as _, false) };
+            unsafe { ffi::blosc2_schunk_avoid_cframe_free(schunk, true) };
+            Ok(Self(schunk))
+        }
+
+        // --- PROPERTIES ---
+
+        /// Check if storage of Schunk is contiguous.
+        pub fn is_contiguous(&self) -> bool {
+            unsafe { (*(self.inner()).storage).contiguous }
+        }
+
+        /// Check typesize
+        pub fn typesize(&self) -> usize {
+            self.inner().typesize as _
+        }
+
+        /// Compression ratio of the Schunk
+        pub fn compression_ratio(&self) -> f32 {
+            if self.inner().cbytes == 0 {
+                return 0f32;
+            }
+            self.inner().nbytes as f32 / self.inner().cbytes as f32
+        }
+
+        /// Number of chunks
+        pub fn n_chunks(&self) -> usize {
+            self.inner().nchunks as _
+        }
+
+        /// Chunk shape
+        pub fn chunk_shape(&self) -> usize {
+            (self.inner().chunksize / self.inner().typesize) as _
+        }
+
+        /// blocksize
+        pub fn blocksize(&self) -> usize {
+            self.inner().blocksize as _
+        }
+
+        /// Count of uncompressed bytes
+        pub fn nbytes(&self) -> usize {
+            self.inner().nbytes as _
+        }
+
+        /// Count of compressed bytes
+        pub fn cbytes(&self) -> usize {
+            self.inner().cbytes as _
+        }
+
+        /// Path where the Schunk is stored, if file backed.
+        pub fn path(&self) -> Option<std::path::PathBuf> {
+            let urlpath_ptr = unsafe { (*(self.inner().storage)).urlpath };
+            if urlpath_ptr.is_null() {
+                return None;
+            }
+            let urlpath = unsafe { CStr::from_ptr(urlpath_ptr) };
+            urlpath.to_str().map(PathBuf::from).ok()
+        }
+
+        /// Returns under of elements in Schunk (nbytes / typesize)
+        pub fn len(&self) -> usize {
+            (self.inner().nbytes / self.inner().typesize as i64) as usize
+        }
+    }
+}
 
 pub mod read {
     ///! NOTE: These De/compressors are different from the blosc2 schunk. There are no frames, meta
@@ -697,6 +904,28 @@ mod tests {
         assert_eq!(n_decompressed as usize, stream.len());
 
         assert_eq!(&decompressed, &stream);
+        Ok(())
+    }
+
+    #[test]
+    fn test_schunk_basic() -> Result<()> {
+        let storage = schunk::Storage::default()
+            .set_contiguous(true)
+            .set_cparams(&mut CParams::default())
+            .set_dparams(&mut DParams::default());
+        let mut schunk = schunk::SChunk::new(storage);
+
+        assert!(schunk.is_contiguous());
+        assert_eq!(schunk.typesize(), 8);
+        assert!(schunk.path().is_none());
+
+        let input = b"some data";
+        let mut decompressed = vec![0u8; input.len()];
+
+        let n = schunk.append_data(input)?;
+        schunk.decompress_chunk(n - 1, &mut decompressed)?;
+        assert_eq!(input, decompressed.as_slice());
+
         Ok(())
     }
 }

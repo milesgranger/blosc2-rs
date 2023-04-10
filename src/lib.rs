@@ -556,9 +556,20 @@ pub fn blosc2_destroy() {
 
 #[cfg(test)]
 mod tests {
+    use ctor::{ctor, dtor};
     use std::io::{Cursor, Read};
 
     use super::*;
+
+    #[ctor]
+    fn init() {
+        blosc2_init();
+    }
+
+    #[dtor]
+    fn destory() {
+        blosc2_destroy();
+    }
 
     #[test]
     fn test_compress_ctx() -> Result<()> {

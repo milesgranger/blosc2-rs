@@ -10,3 +10,6 @@ name = "blosc2"
 
 [dependencies]
 blosc2-sys = { path = "blosc2-sys" }
+
+[dev-dependencies]
+ctor = "0.2.0"

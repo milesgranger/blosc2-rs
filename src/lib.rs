@@ -108,6 +108,7 @@ pub mod schunk {
         }
 
         #[inline]
+        #[allow(dead_code)]
         pub(crate) fn inner_mut(&mut self) -> &mut ffi::blosc2_schunk {
             unsafe { &mut (*self.0) }
         }
@@ -184,22 +185,19 @@ pub mod schunk {
         }
 
         pub fn into_vec(self) -> Result<Vec<u8>> {
-            let mut needs_free = false;
-            let mut buf = Vec::with_capacity(unsafe { (*self.0).nbytes } as usize);
-            let len = unsafe {
-                ffi::blosc2_schunk_to_buffer(self.0, &mut buf.as_mut_ptr() as _, &mut needs_free)
-            };
+            let mut needs_free = true;
+            let mut ptr: *mut u8 = std::ptr::null_mut();
+            let len = unsafe { ffi::blosc2_schunk_to_buffer(self.0, &mut ptr, &mut needs_free) };
             if len < 0 {
                 return Err(format!("Failed to convert to buffer, return code '{}'", len).into());
-            } else {
-                unsafe { buf.set_len(len as _) };
             }
-            buf.shrink_to_fit();
-            if !needs_free {
-                Ok(buf.clone())
-            } else {
-                Ok(buf)
+
+            let mut buf = unsafe { Vec::from_raw_parts(ptr, len as _, len as _) };
+            if needs_free {
+                buf = buf.clone(); // Clone into new since blosc is about to free this one
+                unsafe { ffi::free(ptr as _) };
             }
+            Ok(buf)
         }
 
         /// Create a Schunk from an owned `Vec<u8>`. Data will be owned by the Schunk and released
@@ -221,6 +219,9 @@ pub mod schunk {
             // schunk is a view of the slice, so copy is false and set to avoid freeing the buffer
             let schunk =
                 unsafe { ffi::blosc2_schunk_from_buffer(buf.as_mut_ptr(), buf.len() as _, false) };
+            if schunk.is_null() {
+                return Err("Failed to get schunk from buffer".into());
+            }
             unsafe { ffi::blosc2_schunk_avoid_cframe_free(schunk, true) };
             Ok(Self(schunk))
         }
@@ -925,6 +926,17 @@ mod tests {
         let n = schunk.append_data(input)?;
         schunk.decompress_chunk(n - 1, &mut decompressed)?;
         assert_eq!(input, decompressed.as_slice());
+
+        // Reconstruct thru slice
+        let mut v = schunk.into_vec()?;
+        {
+            schunk = schunk::SChunk::from_slice(&mut v)?;
+            assert_eq!(schunk.n_chunks(), 1);
+        }
+
+        // Reconstruct thru vec
+        schunk = schunk::SChunk::from_vec(v)?;
+        assert_eq!(schunk.n_chunks(), 1);
 
         Ok(())
     }

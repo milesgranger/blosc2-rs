@@ -17,7 +17,7 @@ fn main() {
     println!("cargo:rustc-link-search={}/lib", lib.display());
     println!("cargo:rustc-link-lib=static=blosc2");
 
-    let out = PathBuf::from(&(format!("{}/src/ffi.rs", env!("CARGO_MANIFEST_DIR"))));
+    let out = PathBuf::from(&(format!("{}/bindings.rs", std::env::var("OUT_DIR").unwrap())));
     bindgen::Builder::default()
         .header(&format!("{}/include/blosc2.h", lib.display()))
         .layout_tests(false)

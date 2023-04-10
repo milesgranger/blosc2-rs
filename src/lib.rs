@@ -1,7 +1,7 @@
 use std::ffi::c_void;
 use std::ffi::CString;
 
-use blosc2_sys::ffi;
+use blosc2_sys as ffi;
 
 /// Result type used in this library
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -10,15 +10,14 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 pub const BUFSIZE: usize = 8196_usize;
 
 #[derive(Debug, Copy, Clone)]
-#[repr(u32)]
 pub enum Filter {
-    NoFilter = ffi::BLOSC_NOFILTER,
-    Shuffle = ffi::BLOSC_SHUFFLE,
-    BitShuffle = ffi::BLOSC_BITSHUFFLE,
-    Delta = ffi::BLOSC_DELTA,
-    TruncPrec = ffi::BLOSC_TRUNC_PREC,
-    LastFilter = ffi::BLOSC_LAST_FILTER,
-    LastRegisteredFilter = ffi::BLOSC_LAST_REGISTERED_FILTER,
+    NoFilter = ffi::BLOSC_NOFILTER as _,
+    Shuffle = ffi::BLOSC_SHUFFLE as _,
+    BitShuffle = ffi::BLOSC_BITSHUFFLE as _,
+    Delta = ffi::BLOSC_DELTA as _,
+    TruncPrec = ffi::BLOSC_TRUNC_PREC as _,
+    LastFilter = ffi::BLOSC_LAST_FILTER as _,
+    LastRegisteredFilter = ffi::BLOSC_LAST_REGISTERED_FILTER as _,
 }
 
 impl Default for Filter {
@@ -28,15 +27,14 @@ impl Default for Filter {
 }
 
 #[derive(Debug, Copy, Clone)]
-#[repr(u32)]
 pub enum Codec {
-    BloscLz = ffi::BLOSC_BLOSCLZ,
-    LZ4 = ffi::BLOSC_LZ4,
-    LZ4HC = ffi::BLOSC_LZ4HC,
-    ZLIB = ffi::BLOSC_ZLIB,
-    ZSTD = ffi::BLOSC_ZSTD,
-    LastCodec = ffi::BLOSC_LAST_CODEC,
-    LastRegisteredCodec = ffi::BLOSC_LAST_REGISTERED_CODEC,
+    BloscLz = ffi::BLOSC_BLOSCLZ as _,
+    LZ4 = ffi::BLOSC_LZ4 as _,
+    LZ4HC = ffi::BLOSC_LZ4HC as _,
+    ZLIB = ffi::BLOSC_ZLIB as _,
+    ZSTD = ffi::BLOSC_ZSTD as _,
+    LastCodec = ffi::BLOSC_LAST_CODEC as _,
+    LastRegisteredCodec = ffi::BLOSC_LAST_REGISTERED_CODEC as _,
 }
 
 impl Default for Codec {

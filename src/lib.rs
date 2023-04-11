@@ -303,6 +303,19 @@ pub mod schunk {
             (self.inner().nbytes / self.inner().typesize as i64) as usize
         }
     }
+
+    use std::io;
+
+    impl io::Write for SChunk {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.append_buffer(buf)
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
 }
 
 pub mod read {
@@ -1131,6 +1144,28 @@ mod tests {
         // Reconstruct thru vec
         schunk = schunk::SChunk::from_vec(v)?;
         assert_eq!(schunk.n_chunks(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_schunk_write() -> Result<()> {
+        let input = std::iter::repeat(b"some data")
+            .take(BUFSIZE)
+            .flat_map(|v| v.to_vec())
+            .collect::<Vec<u8>>();
+        let storage = schunk::Storage::default()
+            .set_contiguous(true)
+            .set_cparams(&mut CParams::from(&input[0]))
+            .set_dparams(&mut DParams::default());
+        let mut schunk = schunk::SChunk::new(storage);
+
+        let nbytes = std::io::copy(&mut Cursor::new(input.clone()), &mut schunk)?;
+        assert_eq!(nbytes as usize, input.len());
+
+        let ratio = schunk.compression_ratio(); // ~36.
+        assert!(35. < ratio);
+        assert!(37. > ratio);
 
         Ok(())
     }

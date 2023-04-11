@@ -119,7 +119,7 @@ pub mod schunk {
                 ffi::blosc2_schunk_append_buffer(self.0, data.as_ptr() as _, data.len() as _)
             };
             if n < 0 {
-                return Err(format!("Could not append buffer, return code '{}'", n).into());
+                return Err(Blosc2Error::from(n as i32).into());
             }
             Ok(n as _)
         }
@@ -149,7 +149,7 @@ pub mod schunk {
                 unsafe { ffi::free(chunk as _) };
             }
             if rc < 0 {
-                return Err(format!("Failed to get cbuffer sizes, return code '{}'", rc).into());
+                return Err(Blosc2Error::from(rc).into());
             }
             if dst.len() < nbytes as usize {
                 return Err(format!(
@@ -168,11 +168,7 @@ pub mod schunk {
                 )
             };
             if size < 0 {
-                return Err(format!(
-                    "Unable to decompress chunk '{}', exit code: {}",
-                    nchunk, size
-                )
-                .into());
+                return Err(Blosc2Error::from(size).into());
             } else if size == 0 {
                 return Err(format!(
                     "Non-initialized error when decompressing chunk '{}'",
@@ -189,7 +185,7 @@ pub mod schunk {
             let mut ptr: *mut u8 = std::ptr::null_mut();
             let len = unsafe { ffi::blosc2_schunk_to_buffer(self.0, &mut ptr, &mut needs_free) };
             if len < 0 {
-                return Err(format!("Failed to convert to buffer, return code '{}'", len).into());
+                return Err(Blosc2Error::from(len as i32).into());
             }
 
             let mut buf = unsafe { Vec::from_raw_parts(ptr, len as _, len as _) };
@@ -574,7 +570,7 @@ impl<T> TryFrom<&[T]> for CompressedBufferInfo {
             )
         };
         if code < 0 {
-            return Err(format!("Failed to decompress, exit code: '{}'", code).into());
+            return Err(Blosc2Error::from(code).into());
         }
         Ok(CompressedBufferInfo {
             nbytes: nbytes as _,
@@ -616,7 +612,7 @@ pub fn compress_into_ctx<T: Clone>(src: &[T], dst: &mut [T], ctx: &mut Context) 
     if size == 0 {
         return Err(format!("Buffer is incompressible").into());
     } else if size < 0 {
-        return Err(format!("Failed to compress, exit code '{}' from blosc2", size).into());
+        return Err(Blosc2Error::from(size).into());
     }
     Ok(size as _)
 }
@@ -667,7 +663,7 @@ pub fn compress_into<T>(
         )
     };
     if n_bytes < 0 {
-        return Err(format!("Failed to compress, exit code '{}' from blosc2", n_bytes).into());
+        return Err(Blosc2Error::from(n_bytes).into());
     } else if n_bytes == 0 {
         return Err("Data is not compressable.".into());
     }
@@ -704,7 +700,7 @@ pub fn decompress_into_ctx<T: Clone>(src: &[T], dst: &mut [T], ctx: &mut Context
         )
     };
     if n_bytes < 0 {
-        return Err(format!("Failed to compress buffer, return code: '{}'", n_bytes).into());
+        return Err(Blosc2Error::from(n_bytes).into());
     }
     Ok(n_bytes as _)
 }
@@ -734,7 +730,7 @@ pub fn decompress_into<T>(src: &[T], dst: &mut [T]) -> Result<usize> {
         )
     };
     if n_bytes < 0 {
-        return Err(format!("Failed to decompress, exit code: '{}'", n_bytes).into());
+        return Err(Blosc2Error::from(n_bytes).into());
     }
     Ok(n_bytes as _)
 }
@@ -745,8 +741,9 @@ pub fn set_compressor(codec: Codec) -> Result<()> {
         Codec::BloscLz => CString::new("blosclz").unwrap(),
         _ => unimplemented!("Only blosclz codec supported for now"),
     };
-    if unsafe { ffi::blosc1_set_compressor(codec.as_ptr()) } < 0 {
-        Err(format!("The codec '{:?}' is not available", codec).into())
+    let rc = unsafe { ffi::blosc1_set_compressor(codec.as_ptr()) };
+    if rc < 0 {
+        Err(Blosc2Error::from(rc).into())
     } else {
         Ok(())
     }
@@ -760,6 +757,130 @@ pub fn blosc2_init() {
 /// Call at end of using blosc2 library, unless you've never called `blosc2_init`
 pub fn blosc2_destroy() {
     unsafe { ffi::blosc2_destroy() }
+}
+
+/// Possible errors arising from Blosc2 library
+#[derive(Debug)]
+#[repr(i32)]
+pub enum Blosc2Error {
+    /// Generic failure
+    Failure = ffi::BLOSC2_ERROR_FAILURE,
+    /// Bad stream
+    Stream = ffi::BLOSC2_ERROR_STREAM,
+    /// Invalid data
+    Data = ffi::BLOSC2_ERROR_DATA,
+    /// Memory alloc/realloc failure
+    MemoryAlloc = ffi::BLOSC2_ERROR_MEMORY_ALLOC,
+    /// Not enough space to read
+    ReadBuffer = ffi::BLOSC2_ERROR_READ_BUFFER,
+    /// Not enough space to write
+    WriteBuffer = ffi::BLOSC2_ERROR_WRITE_BUFFER,
+    /// Codec not supported
+    CodecSupport = ffi::BLOSC2_ERROR_CODEC_SUPPORT,
+    /// Invalid parameter supplied to codec
+    CodecParam = ffi::BLOSC2_ERROR_CODEC_PARAM,
+    /// Codec dictionary error
+    CodecDict = ffi::BLOSC2_ERROR_CODEC_DICT,
+    /// Version not supported
+    VersionSupport = ffi::BLOSC2_ERROR_VERSION_SUPPORT,
+    /// Invalid value in header
+    InvalidHeader = ffi::BLOSC2_ERROR_INVALID_HEADER,
+    /// Invalid parameter supplied to function
+    InvalidParam = ffi::BLOSC2_ERROR_INVALID_PARAM,
+    /// File read failure
+    FileRead = ffi::BLOSC2_ERROR_FILE_READ,
+    /// File write failure
+    FileWrite = ffi::BLOSC2_ERROR_FILE_WRITE,
+    /// File open failure
+    FileOpen = ffi::BLOSC2_ERROR_FILE_OPEN,
+    /// Not found
+    NotFound = ffi::BLOSC2_ERROR_NOT_FOUND,
+    /// Bad run length encoding
+    RunLength = ffi::BLOSC2_ERROR_RUN_LENGTH,
+    /// Filter pipeline error
+    FilterPipeline = ffi::BLOSC2_ERROR_FILTER_PIPELINE,
+    /// Chunk insert failure
+    ChunkInsert = ffi::BLOSC2_ERROR_CHUNK_INSERT,
+    /// Chunk append failure
+    ChunkAppend = ffi::BLOSC2_ERROR_CHUNK_APPEND,
+    /// Chunk update failure
+    ChunkUpdate = ffi::BLOSC2_ERROR_CHUNK_UPDATE,
+    /// Sizes larger than 2gb not supported
+    TwoGBLimit = ffi::BLOSC2_ERROR_2GB_LIMIT,
+    /// Super-chunk copy failure
+    SchunkCopy = ffi::BLOSC2_ERROR_SCHUNK_COPY,
+    /// Wrong type for frame
+    FrameType = ffi::BLOSC2_ERROR_FRAME_TYPE,
+    /// File truncate failure
+    FileTruncate = ffi::BLOSC2_ERROR_FILE_TRUNCATE,
+    /// Thread or thread context creation failure
+    ThreadCreate = ffi::BLOSC2_ERROR_THREAD_CREATE,
+    /// Postfilter failure
+    PostFilter = ffi::BLOSC2_ERROR_POSTFILTER,
+    /// Special frame failure
+    FrameSpecial = ffi::BLOSC2_ERROR_FRAME_SPECIAL,
+    /// Special super-chunk failure
+    SchunkSpecial = ffi::BLOSC2_ERROR_SCHUNK_SPECIAL,
+    /// IO plugin error
+    PluginIO = ffi::BLOSC2_ERROR_PLUGIN_IO,
+    /// Remove file failure
+    FileRemove = ffi::BLOSC2_ERROR_FILE_REMOVE,
+    /// Pointer is null
+    NullPointer = ffi::BLOSC2_ERROR_NULL_POINTER,
+    /// Invalid index
+    InvalidIndex = ffi::BLOSC2_ERROR_INVALID_INDEX,
+    /// Metalayer has not been found
+    MetalayerNotFound = ffi::BLOSC2_ERROR_METALAYER_NOT_FOUND,
+}
+
+impl std::fmt::Display for Blosc2Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for Blosc2Error {}
+
+impl From<i32> for Blosc2Error {
+    fn from(code: i32) -> Self {
+        match code {
+            ffi::BLOSC2_ERROR_FAILURE => Blosc2Error::Failure,
+            ffi::BLOSC2_ERROR_STREAM => Blosc2Error::Stream,
+            ffi::BLOSC2_ERROR_DATA => Blosc2Error::Data,
+            ffi::BLOSC2_ERROR_MEMORY_ALLOC => Blosc2Error::MemoryAlloc,
+            ffi::BLOSC2_ERROR_READ_BUFFER => Blosc2Error::ReadBuffer,
+            ffi::BLOSC2_ERROR_WRITE_BUFFER => Blosc2Error::WriteBuffer,
+            ffi::BLOSC2_ERROR_CODEC_SUPPORT => Blosc2Error::CodecSupport,
+            ffi::BLOSC2_ERROR_CODEC_PARAM => Blosc2Error::CodecParam,
+            ffi::BLOSC2_ERROR_CODEC_DICT => Blosc2Error::CodecDict,
+            ffi::BLOSC2_ERROR_VERSION_SUPPORT => Blosc2Error::VersionSupport,
+            ffi::BLOSC2_ERROR_INVALID_HEADER => Blosc2Error::InvalidHeader,
+            ffi::BLOSC2_ERROR_INVALID_PARAM => Blosc2Error::InvalidParam,
+            ffi::BLOSC2_ERROR_FILE_READ => Blosc2Error::FileRead,
+            ffi::BLOSC2_ERROR_FILE_WRITE => Blosc2Error::FileWrite,
+            ffi::BLOSC2_ERROR_FILE_OPEN => Blosc2Error::FileOpen,
+            ffi::BLOSC2_ERROR_NOT_FOUND => Blosc2Error::NotFound,
+            ffi::BLOSC2_ERROR_RUN_LENGTH => Blosc2Error::RunLength,
+            ffi::BLOSC2_ERROR_FILTER_PIPELINE => Blosc2Error::FilterPipeline,
+            ffi::BLOSC2_ERROR_CHUNK_INSERT => Blosc2Error::ChunkInsert,
+            ffi::BLOSC2_ERROR_CHUNK_APPEND => Blosc2Error::ChunkAppend,
+            ffi::BLOSC2_ERROR_CHUNK_UPDATE => Blosc2Error::ChunkUpdate,
+            ffi::BLOSC2_ERROR_2GB_LIMIT => Blosc2Error::TwoGBLimit,
+            ffi::BLOSC2_ERROR_SCHUNK_COPY => Blosc2Error::SchunkCopy,
+            ffi::BLOSC2_ERROR_FRAME_TYPE => Blosc2Error::FrameType,
+            ffi::BLOSC2_ERROR_FILE_TRUNCATE => Blosc2Error::FileTruncate,
+            ffi::BLOSC2_ERROR_THREAD_CREATE => Blosc2Error::ThreadCreate,
+            ffi::BLOSC2_ERROR_POSTFILTER => Blosc2Error::PostFilter,
+            ffi::BLOSC2_ERROR_FRAME_SPECIAL => Blosc2Error::FrameSpecial,
+            ffi::BLOSC2_ERROR_SCHUNK_SPECIAL => Blosc2Error::SchunkSpecial,
+            ffi::BLOSC2_ERROR_PLUGIN_IO => Blosc2Error::PluginIO,
+            ffi::BLOSC2_ERROR_FILE_REMOVE => Blosc2Error::FileRemove,
+            ffi::BLOSC2_ERROR_NULL_POINTER => Blosc2Error::NullPointer,
+            ffi::BLOSC2_ERROR_INVALID_INDEX => Blosc2Error::InvalidIndex,
+            ffi::BLOSC2_ERROR_METALAYER_NOT_FOUND => Blosc2Error::MetalayerNotFound,
+            _ => panic!("Error code {} not matched in existing Error codes", code),
+        }
+    }
 }
 
 #[cfg(test)]

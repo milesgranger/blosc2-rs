@@ -130,7 +130,18 @@ pub mod schunk {
         }
 
         /// Append data to SChunk, returning new number of chunks
-        pub fn append<T>(&mut self, data: &[T]) -> Result<usize> {
+        pub fn append_buffer<T>(&mut self, data: &[T]) -> Result<usize> {
+            if data.is_empty() {
+                return Ok(self.inner().nchunks as usize);
+            }
+
+            let size = std::mem::size_of_val(unsafe { &data.get_unchecked(0) });
+            let typesize = self.inner().typesize as _;
+            if size != typesize {
+                let msg = format!("Size of T ({}) != schunk typesize ({})", size, typesize);
+                return Err(msg.into());
+            }
+
             let n = unsafe {
                 ffi::blosc2_schunk_append_buffer(self.0, data.as_ptr() as _, data.len() as _)
             };
@@ -1100,9 +1111,10 @@ mod tests {
 
     #[test]
     fn test_schunk_basic() -> Result<()> {
+        let input = b"some data";
         let storage = schunk::Storage::default()
             .set_contiguous(true)
-            .set_cparams(&mut CParams::default())
+            .set_cparams(&mut CParams::from(&input[0]))
             .set_dparams(&mut DParams::default());
         let mut schunk = schunk::SChunk::new(storage);
 
@@ -1110,10 +1122,9 @@ mod tests {
         assert_eq!(schunk.typesize(), 8);
         assert!(schunk.path().is_none());
 
-        let input = b"some data";
         let mut decompressed = vec![0u8; input.len()];
 
-        let n = schunk.append(input)?;
+        let n = schunk.append_buffer(input)?;
         schunk.decompress_chunk(n - 1, &mut decompressed)?;
         assert_eq!(input, decompressed.as_slice());
 

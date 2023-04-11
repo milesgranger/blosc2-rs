@@ -130,6 +130,7 @@ pub mod schunk {
         }
 
         /// Append data to SChunk, returning new number of chunks
+        #[inline]
         pub fn append_buffer<T>(&mut self, data: &[T]) -> Result<usize> {
             if data.is_empty() {
                 return Ok(self.inner().nchunks as usize);
@@ -141,7 +142,13 @@ pub mod schunk {
                 let msg = format!("Size of T ({}) != schunk typesize ({})", size, typesize);
                 return Err(msg.into());
             }
+            self.append_buffer_unchecked(data)
+        }
 
+        /// Same as `append_buffer` but will not do any preliminary checks for matching typesize
+        /// or if input buffer is empty.
+        #[inline]
+        pub fn append_buffer_unchecked<T>(&mut self, data: &[T]) -> Result<usize> {
             let n = unsafe {
                 ffi::blosc2_schunk_append_buffer(self.0, data.as_ptr() as _, data.len() as _)
             };
@@ -152,19 +159,15 @@ pub mod schunk {
         }
 
         /// Decompress a chunk, returning number of bytes written to output buffer
+        #[inline]
         pub fn decompress_chunk<T>(&mut self, nchunk: usize, dst: &mut [T]) -> Result<usize> {
             let mut chunk = std::ptr::null_mut();
             let mut needs_free: bool = false;
             let mut rc = unsafe {
-                ffi::blosc2_schunk_get_chunk(
-                    self.0,
-                    nchunk as _,
-                    &mut chunk as *mut *mut u8,
-                    &mut needs_free as *mut bool,
-                )
+                ffi::blosc2_schunk_get_chunk(self.0, nchunk as _, &mut chunk as _, &mut needs_free)
             };
             if rc < 0 {
-                return Err(format!("Failed to get chunk {}, exit code: '{}'", nchunk, rc).into());
+                return Err(Blosc2Error::from(rc as i32).into());
             }
             let mut nbytes = 0;
             let mut cbytes = 0;
@@ -179,29 +182,19 @@ pub mod schunk {
                 return Err(Blosc2Error::from(rc).into());
             }
             if dst.len() < nbytes as usize {
-                return Err(format!(
-                    "Output buffer not large enough, need {} but length is {}",
-                    nbytes,
-                    dst.len()
-                )
-                .into());
+                let msg = format!("Not large enough, need {} but got {}", nbytes, dst.len());
+                return Err(msg.into());
             }
-            let size = unsafe {
-                ffi::blosc2_schunk_decompress_chunk(
-                    self.0,
-                    nchunk as _,
-                    dst.as_mut_ptr() as _,
-                    nbytes,
-                )
-            };
+
+            let ptr = dst.as_mut_ptr() as _;
+            let size =
+                unsafe { ffi::blosc2_schunk_decompress_chunk(self.0, nchunk as _, ptr, nbytes) };
+
             if size < 0 {
                 return Err(Blosc2Error::from(size).into());
             } else if size == 0 {
-                return Err(format!(
-                    "Non-initialized error when decompressing chunk '{}'",
-                    nchunk
-                )
-                .into());
+                let msg = format!("Non-initialized error decompressing chunk '{}'", nchunk);
+                return Err(msg.into());
             } else {
                 Ok(size as _)
             }

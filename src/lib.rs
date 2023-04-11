@@ -105,6 +105,57 @@ pub mod schunk {
         }
     }
 
+    pub struct Chunk {
+        pub(crate) chunk: *mut u8,
+        pub(crate) needs_free: bool,
+    }
+
+    impl Chunk {
+        pub fn new(chunk: *mut u8, needs_free: bool) -> Self {
+            Self { chunk, needs_free }
+        }
+        pub fn from_schunk(schunk: &mut SChunk, nchunk: usize) -> Result<Self> {
+            let mut chunk: *mut u8 = std::ptr::null_mut();
+            let mut needs_free: bool = false;
+            let rc = unsafe {
+                ffi::blosc2_schunk_get_chunk(
+                    schunk.0,
+                    nchunk as _,
+                    &mut chunk as _,
+                    &mut needs_free,
+                )
+            };
+            if rc < 0 {
+                return Err(Blosc2Error::from(rc as i32).into());
+            }
+            Ok(Self { chunk, needs_free })
+        }
+        pub fn info(&mut self) -> Result<CompressedBufferInfo> {
+            let mut nbytes = 0;
+            let mut cbytes = 0;
+            let mut blocksize = 0;
+            let rc = unsafe {
+                ffi::blosc2_cbuffer_sizes(self.chunk as _, &mut nbytes, &mut cbytes, &mut blocksize)
+            };
+            if rc < 0 {
+                return Err(Blosc2Error::from(rc).into());
+            }
+            Ok(CompressedBufferInfo {
+                nbytes: nbytes as _,
+                cbytes: cbytes as _,
+                blocksize: blocksize as _,
+            })
+        }
+    }
+
+    impl Drop for Chunk {
+        fn drop(&mut self) {
+            if self.needs_free {
+                unsafe { ffi::free(self.chunk as _) };
+            }
+        }
+    }
+
     /// Wrapper to [blosc2_schunk]
     ///
     /// [blosc2_schunk]: blosc2_sys::blosc2_schunk
@@ -161,34 +212,21 @@ pub mod schunk {
         /// Decompress a chunk, returning number of bytes written to output buffer
         #[inline]
         pub fn decompress_chunk<T>(&mut self, nchunk: usize, dst: &mut [T]) -> Result<usize> {
-            let mut chunk = std::ptr::null_mut();
-            let mut needs_free: bool = false;
-            let mut rc = unsafe {
-                ffi::blosc2_schunk_get_chunk(self.0, nchunk as _, &mut chunk as _, &mut needs_free)
-            };
-            if rc < 0 {
-                return Err(Blosc2Error::from(rc as i32).into());
-            }
-            let mut nbytes = 0;
-            let mut cbytes = 0;
-            let mut blocksize = 0;
-            rc = unsafe {
-                ffi::blosc2_cbuffer_sizes(chunk as _, &mut nbytes, &mut cbytes, &mut blocksize)
-            };
-            if needs_free {
-                unsafe { ffi::free(chunk as _) };
-            }
-            if rc < 0 {
-                return Err(Blosc2Error::from(rc).into());
-            }
-            if dst.len() < nbytes as usize {
-                let msg = format!("Not large enough, need {} but got {}", nbytes, dst.len());
+            let mut chunk = Chunk::from_schunk(self, nchunk)?;
+            let info = chunk.info()?;
+            if dst.len() < info.nbytes as usize {
+                let msg = format!(
+                    "Not large enough, need {} but got {}",
+                    info.nbytes,
+                    dst.len()
+                );
                 return Err(msg.into());
             }
 
             let ptr = dst.as_mut_ptr() as _;
-            let size =
-                unsafe { ffi::blosc2_schunk_decompress_chunk(self.0, nchunk as _, ptr, nbytes) };
+            let size = unsafe {
+                ffi::blosc2_schunk_decompress_chunk(self.0, nchunk as _, ptr, info.nbytes as _)
+            };
 
             if size < 0 {
                 return Err(Blosc2Error::from(size).into());
@@ -314,6 +352,60 @@ pub mod schunk {
         }
         fn flush(&mut self) -> io::Result<()> {
             Ok(())
+        }
+    }
+
+    /// struct only used for wrapping a mutable reference to a `SChunk`
+    /// to support `std::io::Read` decoding for a SChunk.
+    ///
+    /// This isn't needed for encoding/ `std::io::Write` since we can directly
+    /// write buffers into SChunk. However, for `Read`, we can't be certain the
+    /// decompressed chunks will fit into the supplied `&mut [u8]` buffer provided
+    /// during `Read::read`. So this struct exists only to hold those intermediate
+    /// buffer and position variables and not clutter `SChunk` implementation.
+    pub struct SChunkDecoder<'schunk> {
+        pub(crate) schunk: &'schunk mut SChunk,
+        pub(crate) buf: io::Cursor<Vec<u8>>,
+        pub(crate) nchunk: usize,
+    }
+    impl<'schunk> SChunkDecoder<'schunk> {
+        pub fn new(schunk: &'schunk mut SChunk) -> Self {
+            Self {
+                schunk,
+                buf: io::Cursor::new(vec![]),
+                nchunk: 0,
+            }
+        }
+    }
+
+    impl<'schunk> io::Read for SChunkDecoder<'schunk> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            // Cursor is at end of buffer, so we can refill
+            if self.buf.position() as usize == self.buf.get_ref().len() {
+                self.buf.get_mut().truncate(0);
+                self.buf.set_position(0);
+
+                // Get chunk and check if we can decompress directly into caller's buffer
+                let mut chunk = Chunk::from_schunk(self.schunk, self.nchunk)
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                let nbytes = chunk
+                    .info()
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?
+                    .nbytes;
+
+                if nbytes <= buf.len() {
+                    self.schunk
+                        .decompress_chunk(self.nchunk, buf)
+                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                    return Ok(nbytes);
+                } else {
+                    self.buf.get_mut().resize(nbytes as _, 0u8);
+                    self.schunk
+                        .decompress_chunk(self.nchunk, self.buf.get_mut().as_mut_slice())
+                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                }
+            }
+            self.buf.read(buf)
         }
     }
 }

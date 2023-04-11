@@ -400,9 +400,14 @@ pub mod schunk {
                     return Ok(nbytes);
                 } else {
                     self.buf.get_mut().resize(nbytes as _, 0u8);
-                    self.schunk
+                    let nbytes_written = self
+                        .schunk
                         .decompress_chunk(self.nchunk, self.buf.get_mut().as_mut_slice())
                         .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+
+                    // These should always be equal, otherwise blosc2 gave the wrong expected
+                    // uncompressed size of this chunk.
+                    debug_assert_eq!(nbytes_written, nbytes);
                 }
             }
             self.buf.read(buf)

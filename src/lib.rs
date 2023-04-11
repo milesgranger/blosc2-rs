@@ -382,6 +382,9 @@ pub mod schunk {
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             // Cursor is at end of buffer, so we can refill
             if self.buf.position() as usize == self.buf.get_ref().len() {
+                if self.nchunk > self.schunk.n_chunks() {
+                    return Ok(0);
+                }
                 self.buf.get_mut().truncate(0);
                 self.buf.set_position(0);
 
@@ -409,6 +412,7 @@ pub mod schunk {
                     // uncompressed size of this chunk.
                     debug_assert_eq!(nbytes_written, nbytes);
                 }
+                self.nchunk += 1;
             }
             self.buf.read(buf)
         }
@@ -1263,6 +1267,12 @@ mod tests {
         let ratio = schunk.compression_ratio(); // ~36.
         assert!(35. < ratio);
         assert!(37. > ratio);
+
+        let mut uncompressed = vec![];
+        let mut decoder = schunk::SChunkDecoder::new(&mut schunk);
+        let n = std::io::copy(&mut decoder, &mut uncompressed)?;
+        assert_eq!(input, uncompressed.as_slice());
+        assert_eq!(n as usize, input.len());
 
         Ok(())
     }

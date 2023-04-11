@@ -1,3 +1,5 @@
+//! Blosc2 Rust bindings.
+
 use std::ffi::c_void;
 use std::ffi::CString;
 
@@ -9,6 +11,7 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 /// Default buffer size for intermediate de/compression results when required
 pub const BUFSIZE: usize = 8196_usize;
 
+/// Possible Filters
 #[derive(Debug, Copy, Clone)]
 pub enum Filter {
     NoFilter = ffi::BLOSC_NOFILTER as _,
@@ -26,6 +29,7 @@ impl Default for Filter {
     }
 }
 
+/// Possible compression codecs
 #[derive(Debug, Copy, Clone)]
 pub enum Codec {
     BloscLz = ffi::BLOSC_BLOSCLZ as _,
@@ -65,33 +69,45 @@ impl Default for CLevel {
 }
 
 pub mod schunk {
+    //! `blosc2_schunk` and `blosc2_storage` API
+
     use std::ffi::CStr;
     use std::path::PathBuf;
 
     use super::*;
 
+    /// Wrapper to [blosc2_storage]
+    ///
+    /// [blosc2_storage]: blosc2_sys::blosc2_storage
     #[derive(Default)]
     pub struct Storage(ffi::blosc2_storage);
 
     impl Storage {
+        /// Set url/file path to specify a file-backed `schunk`.
         pub fn set_urlpath<S: ToString>(mut self, urlpath: S) -> Result<Self> {
             self.0.urlpath = CString::new(urlpath.to_string())?.into_raw();
             Ok(self)
         }
+        /// Set the contiguous nature of the `schunk`.
         pub fn set_contiguous(mut self, contiguous: bool) -> Self {
             self.0.contiguous = contiguous;
             self
         }
+        /// Set compression parameters
         pub fn set_cparams(mut self, cparams: &mut CParams) -> Self {
             self.0.cparams = &mut cparams.0;
             self
         }
+        /// Set decompression parameters
         pub fn set_dparams(mut self, dparams: &mut DParams) -> Self {
             self.0.dparams = &mut dparams.0;
             self
         }
     }
 
+    /// Wrapper to [blosc2_schunk]
+    ///
+    /// [blosc2_schunk]: blosc2_sys::blosc2_schunk
     pub struct SChunk(pub(crate) *mut ffi::blosc2_schunk);
 
     // Loosely inspired by blosc2-python implementation
@@ -114,7 +130,7 @@ pub mod schunk {
         }
 
         /// Append data to SChunk, returning new number of chunks
-        pub fn append_data<T>(&mut self, data: &[T]) -> Result<usize> {
+        pub fn append<T>(&mut self, data: &[T]) -> Result<usize> {
             let n = unsafe {
                 ffi::blosc2_schunk_append_buffer(self.0, data.as_ptr() as _, data.len() as _)
             };
@@ -180,6 +196,7 @@ pub mod schunk {
             }
         }
 
+        /// Export this `SChunk` into a buffer
         pub fn into_vec(self) -> Result<Vec<u8>> {
             let mut needs_free = true;
             let mut ptr: *mut u8 = std::ptr::null_mut();
@@ -285,9 +302,11 @@ pub mod schunk {
 }
 
 pub mod read {
-    ///! NOTE: These De/compressors are different from the blosc2 schunk. There are no frames, meta
-    ///! layers, etc. It's _only_ meant for one or more independently compressed blocks. No more, no
-    ///! less. If you're wanting `schunk` then hop over to the `crate::schunk` module(s).
+    //! NOTE: These De/compressors are different from the blosc2 schunk. There are no frames, meta
+    //! layers, etc. It's _only_ meant for one or more independently compressed blocks. No more, no
+    //! less. If you're wanting `schunk` then hop over to the [schunk] module.
+    //!
+    //! [schunk]: crate::schunk
     use super::*;
 
     pub struct Decompressor<R: std::io::Read> {
@@ -451,23 +470,56 @@ pub mod read {
     }
 }
 
+/// Wrapper to [blosc2_cparams].  
+/// Compression parameters.
+///
+/// A normal way to construct this is using `std::convert::From<&T>(val)`
+/// so it will create with default parameters and the correct `typesize`.
+///
+/// Example
+/// -------
+/// ```
+/// use blosc2::CParams;
+/// let values = vec![0, 1, 2, 3];
+/// let cparams = CParams::from(&values[0])
+///     .set_threads(2);  // Optionally adjust default values
+/// ```
+/// [blosc2_cparams]: blosc2_sys::blosc2_cparams
 pub struct CParams(ffi::blosc2_cparams);
 
 impl CParams {
-    pub fn into_inner(self) -> ffi::blosc2_cparams {
+    pub(crate) fn into_inner(self) -> ffi::blosc2_cparams {
         self.0
     }
-    pub fn inner_ref_mut(&mut self) -> &mut ffi::blosc2_cparams {
+    #[allow(dead_code)]
+    pub(crate) fn inner_ref_mut(&mut self) -> &mut ffi::blosc2_cparams {
         &mut self.0
     }
-    pub fn set_codec(&mut self, codec: Codec) {
+    /// Set codec, defaults to [Codec::BloscLz]
+    ///
+    /// [Codec::BloscLz]: crate::Codec::BloscLz
+    pub fn set_codec(mut self, codec: Codec) -> Self {
         self.0.compcode = codec as _;
+        self
     }
-    pub fn set_clevel(&mut self, clevel: i32) {
+    /// Set clevel, defaults to [CLevel::Nine]
+    ///
+    /// [CLevel::Nine]: crate::CLevel::Nine
+    pub fn set_clevel(mut self, clevel: CLevel) -> Self {
         self.0.clevel = clevel as _;
+        self
     }
-    pub fn set_filter(&mut self, filter: Filter) {
+    /// Set filter, defaults to [Filter::Shuffle]
+    ///
+    /// [Filter::Shuffle]: crate::Filter::Shuffle
+    pub fn set_filter(mut self, filter: Filter) -> Self {
         self.0.filters[ffi::BLOSC2_MAX_FILTERS as usize - 1] = filter as _;
+        self
+    }
+    /// Set number of threads, defaults to 1
+    pub fn set_threads(mut self, n: usize) -> Self {
+        self.0.nthreads = n as _;
+        self
     }
 }
 
@@ -494,11 +546,25 @@ impl<T> From<&T> for CParams {
     }
 }
 
+/// Wrapper to [blosc2_dparams].  
+/// Decompression parameters, normally constructed via `DParams::default()`.
+///
+/// Example
+/// -------
+/// ```
+/// use blosc2::DParams;
+/// let dparams = DParams::default()
+///     .set_threads(2);  // Optionally adjust default values
+/// ```
+///
+/// [blosc2_dparams]: blosc2_sys::blosc2_dparams
 pub struct DParams(pub(crate) ffi::blosc2_dparams);
 
 impl DParams {
-    pub fn set_n_threads(&mut self, n: usize) {
+    /// Set number of theads for decompression, defaults to 1
+    pub fn set_threads(mut self, n: usize) -> Self {
         self.0.nthreads = n as _;
+        self
     }
 }
 
@@ -511,7 +577,10 @@ impl Default for DParams {
     }
 }
 
+/// Wrapper to [blosc2_context].  
 /// Container struct for de/compression ops requiring context when used in multithreaded environments
+///
+/// [blosc2_context]: blosc2_sys::blosc2_context
 #[derive(Clone)]
 pub struct Context(pub(crate) *mut ffi::blosc2_context);
 
@@ -750,12 +819,12 @@ pub fn set_compressor(codec: Codec) -> Result<()> {
 }
 
 /// Call before using blosc2, unless using specific ctx de/compression variants
-pub fn blosc2_init() {
+pub fn init() {
     unsafe { ffi::blosc2_init() }
 }
 
 /// Call at end of using blosc2 library, unless you've never called `blosc2_init`
-pub fn blosc2_destroy() {
+pub fn destroy() {
     unsafe { ffi::blosc2_destroy() }
 }
 
@@ -891,13 +960,13 @@ mod tests {
     use super::*;
 
     #[ctor]
-    fn init() {
-        blosc2_init();
+    fn blosc2_init() {
+        init();
     }
 
     #[dtor]
-    fn destory() {
-        blosc2_destroy();
+    fn blosc2_destory() {
+        destroy();
     }
 
     #[test]
@@ -1044,7 +1113,7 @@ mod tests {
         let input = b"some data";
         let mut decompressed = vec![0u8; input.len()];
 
-        let n = schunk.append_data(input)?;
+        let n = schunk.append(input)?;
         schunk.decompress_chunk(n - 1, &mut decompressed)?;
         assert_eq!(input, decompressed.as_slice());
 

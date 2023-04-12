@@ -382,7 +382,7 @@ pub mod schunk {
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             // Cursor is at end of buffer, so we can refill
             if self.buf.position() as usize == self.buf.get_ref().len() {
-                if self.nchunk > self.schunk.n_chunks() {
+                if self.nchunk >= self.schunk.n_chunks() {
                     return Ok(0);
                 }
                 self.buf.get_mut().truncate(0);
@@ -400,6 +400,7 @@ pub mod schunk {
                     self.schunk
                         .decompress_chunk(self.nchunk, buf)
                         .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                    self.nchunk += 1;
                     return Ok(nbytes);
                 } else {
                     self.buf.get_mut().resize(nbytes as _, 0u8);

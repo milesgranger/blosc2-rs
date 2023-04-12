@@ -69,9 +69,10 @@ impl Default for CLevel {
 }
 
 pub mod schunk {
-    //! `blosc2_schunk` and `blosc2_storage` API
+    //! `blosc2_schunk`,`blosc2_storage`, and `Chunk` APIs
 
     use std::ffi::CStr;
+    use std::io;
     use std::path::PathBuf;
 
     use super::*;
@@ -105,15 +106,45 @@ pub mod schunk {
         }
     }
 
+    /// Wraps a single chunk of a super-chunk.
+    ///
+    /// Normally constructed via `Chunk::from_schunk`
+    ///
+    /// Example
+    /// -------
+    /// ```
+    /// use std::io::Write;
+    /// use blosc2::{CParams, DParams};
+    /// use blosc2::schunk::{Storage, SChunk, Chunk};
+    ///
+    /// let input = b"some data";
+    /// let storage = Storage::default()
+    ///     .set_contiguous(true)
+    ///     .set_cparams(&mut CParams::from(&input[0]))
+    ///     .set_dparams(&mut DParams::default());
+    /// let mut schunk = SChunk::new(storage);
+    ///
+    /// let n = schunk.write(input).unwrap();  // same as schunk.append_buffer(input)?;
+    /// assert_eq!(n as usize, input.len());
+    /// assert_eq!(schunk.n_chunks(), 1);
+    ///
+    /// let chunk = Chunk::from_schunk(&mut schunk, 0).unwrap();  // Get first (and only) chunk
+    /// assert_eq!(chunk.info().unwrap().nbytes() as usize, input.len());
+    /// ```
     pub struct Chunk {
         pub(crate) chunk: *mut u8,
         pub(crate) needs_free: bool,
     }
 
     impl Chunk {
+        /// Create a new `Chunk` directly from a pointer, you probably
+        /// want `Chunk::from_schunk` instead.
         pub fn new(chunk: *mut u8, needs_free: bool) -> Self {
             Self { chunk, needs_free }
         }
+
+        /// Create a new `Chunk` from a `SChunk`
+        #[inline]
         pub fn from_schunk(schunk: &mut SChunk, nchunk: usize) -> Result<Self> {
             let mut chunk: *mut u8 = std::ptr::null_mut();
             let mut needs_free: bool = false;
@@ -130,7 +161,9 @@ pub mod schunk {
             }
             Ok(Self { chunk, needs_free })
         }
-        pub fn info(&mut self) -> Result<CompressedBufferInfo> {
+        /// Get `CompressedBufferInfo` for this chunk.
+        #[inline]
+        pub fn info(&self) -> Result<CompressedBufferInfo> {
             let mut nbytes = 0;
             let mut cbytes = 0;
             let mut blocksize = 0;
@@ -212,7 +245,7 @@ pub mod schunk {
         /// Decompress a chunk, returning number of bytes written to output buffer
         #[inline]
         pub fn decompress_chunk<T>(&mut self, nchunk: usize, dst: &mut [T]) -> Result<usize> {
-            let mut chunk = Chunk::from_schunk(self, nchunk)?;
+            let chunk = Chunk::from_schunk(self, nchunk)?;
             let info = chunk.info()?;
             if dst.len() < info.nbytes as usize {
                 let msg = format!(
@@ -342,8 +375,6 @@ pub mod schunk {
         }
     }
 
-    use std::io;
-
     impl io::Write for SChunk {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
             self.append_buffer(buf)
@@ -389,7 +420,7 @@ pub mod schunk {
                 self.buf.set_position(0);
 
                 // Get chunk and check if we can decompress directly into caller's buffer
-                let mut chunk = Chunk::from_schunk(self.schunk, self.nchunk)
+                let chunk = Chunk::from_schunk(self.schunk, self.nchunk)
                     .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
                 let nbytes = chunk
                     .info()
@@ -733,12 +764,24 @@ impl Drop for Context {
 /// Normal construction via `CompressedBufferInfo::try_from(&[u8])?`
 pub struct CompressedBufferInfo {
     /// Number of bytes decompressed
-    pub nbytes: usize,
+    nbytes: usize,
     /// Number of bytes to be read from compressed buffer
-    pub cbytes: usize,
+    cbytes: usize,
     /// Used internally by blosc2 when compressing the blocks, exposed here for completion.
     /// You probably won't need it.
-    pub blocksize: usize,
+    blocksize: usize,
+}
+
+impl CompressedBufferInfo {
+    pub fn nbytes(&self) -> usize {
+        self.nbytes
+    }
+    pub fn cbytes(&self) -> usize {
+        self.cbytes
+    }
+    pub fn blocksize(&self) -> usize {
+        self.blocksize
+    }
 }
 
 impl<T> TryFrom<&[T]> for CompressedBufferInfo {

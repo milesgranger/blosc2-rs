@@ -1,3 +1,5 @@
+//! Blosc2 Rust bindings.
+
 use std::ffi::c_void;
 use std::ffi::CString;
 
@@ -9,6 +11,7 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 /// Default buffer size for intermediate de/compression results when required
 pub const BUFSIZE: usize = 8196_usize;
 
+/// Possible Filters
 #[derive(Debug, Copy, Clone)]
 pub enum Filter {
     NoFilter = ffi::BLOSC_NOFILTER as _,
@@ -26,6 +29,7 @@ impl Default for Filter {
     }
 }
 
+/// Possible compression codecs
 #[derive(Debug, Copy, Clone)]
 pub enum Codec {
     BloscLz = ffi::BLOSC_BLOSCLZ as _,
@@ -64,26 +68,395 @@ impl Default for CLevel {
     }
 }
 
-// pub mod schunk {
-//     use super::*;
+pub mod schunk {
+    //! `blosc2_schunk`,`blosc2_storage`, and `Chunk` APIs
 
-//     use super::*;
+    use std::ffi::CStr;
+    use std::io;
+    use std::path::PathBuf;
 
-//     pub struct Storage(ffi::blosc2_storage);
+    use super::*;
 
-//     pub struct SChunk(ffi::blosc2_schunk);
+    /// Wrapper to [blosc2_storage]
+    ///
+    /// [blosc2_storage]: blosc2_sys::blosc2_storage
+    #[derive(Default)]
+    pub struct Storage(ffi::blosc2_storage);
 
-//     impl SChunk {
-//         pub fn new() -> Self {
-//             ffi::blosc2_schunk_new()
-//         }
-//     }
-// }
+    impl Storage {
+        /// Set url/file path to specify a file-backed `schunk`.
+        pub fn set_urlpath<S: ToString>(mut self, urlpath: S) -> Result<Self> {
+            self.0.urlpath = CString::new(urlpath.to_string())?.into_raw();
+            Ok(self)
+        }
+        /// Set the contiguous nature of the `schunk`.
+        pub fn set_contiguous(mut self, contiguous: bool) -> Self {
+            self.0.contiguous = contiguous;
+            self
+        }
+        /// Set compression parameters
+        pub fn set_cparams(mut self, cparams: &mut CParams) -> Self {
+            self.0.cparams = &mut cparams.0;
+            self
+        }
+        /// Set decompression parameters
+        pub fn set_dparams(mut self, dparams: &mut DParams) -> Self {
+            self.0.dparams = &mut dparams.0;
+            self
+        }
+    }
+
+    /// Wraps a single chunk of a super-chunk.
+    ///
+    /// Normally constructed via `Chunk::from_schunk`
+    ///
+    /// Example
+    /// -------
+    /// ```
+    /// use std::io::Write;
+    /// use blosc2::{CParams, DParams};
+    /// use blosc2::schunk::{Storage, SChunk, Chunk};
+    ///
+    /// let input = b"some data";
+    /// let storage = Storage::default()
+    ///     .set_contiguous(true)
+    ///     .set_cparams(&mut CParams::from(&input[0]))
+    ///     .set_dparams(&mut DParams::default());
+    /// let mut schunk = SChunk::new(storage);
+    ///
+    /// let n = schunk.write(input).unwrap();  // same as schunk.append_buffer(input)?;
+    /// assert_eq!(n as usize, input.len());
+    /// assert_eq!(schunk.n_chunks(), 1);
+    ///
+    /// let chunk = Chunk::from_schunk(&mut schunk, 0).unwrap();  // Get first (and only) chunk
+    /// assert_eq!(chunk.info().unwrap().nbytes() as usize, input.len());
+    /// ```
+    pub struct Chunk {
+        pub(crate) chunk: *mut u8,
+        pub(crate) needs_free: bool,
+    }
+
+    impl Chunk {
+        /// Create a new `Chunk` directly from a pointer, you probably
+        /// want `Chunk::from_schunk` instead.
+        pub fn new(chunk: *mut u8, needs_free: bool) -> Self {
+            Self { chunk, needs_free }
+        }
+
+        /// Create a new `Chunk` from a `SChunk`
+        #[inline]
+        pub fn from_schunk(schunk: &mut SChunk, nchunk: usize) -> Result<Self> {
+            let mut chunk: *mut u8 = std::ptr::null_mut();
+            let mut needs_free: bool = false;
+            let rc = unsafe {
+                ffi::blosc2_schunk_get_chunk(
+                    schunk.0,
+                    nchunk as _,
+                    &mut chunk as _,
+                    &mut needs_free,
+                )
+            };
+            if rc < 0 {
+                return Err(Blosc2Error::from(rc as i32).into());
+            }
+            Ok(Self { chunk, needs_free })
+        }
+        /// Get `CompressedBufferInfo` for this chunk.
+        #[inline]
+        pub fn info(&self) -> Result<CompressedBufferInfo> {
+            let mut nbytes = 0;
+            let mut cbytes = 0;
+            let mut blocksize = 0;
+            let rc = unsafe {
+                ffi::blosc2_cbuffer_sizes(self.chunk as _, &mut nbytes, &mut cbytes, &mut blocksize)
+            };
+            if rc < 0 {
+                return Err(Blosc2Error::from(rc).into());
+            }
+            Ok(CompressedBufferInfo {
+                nbytes: nbytes as _,
+                cbytes: cbytes as _,
+                blocksize: blocksize as _,
+            })
+        }
+    }
+
+    impl Drop for Chunk {
+        fn drop(&mut self) {
+            if self.needs_free {
+                unsafe { ffi::free(self.chunk as _) };
+            }
+        }
+    }
+
+    /// Wrapper to [blosc2_schunk]
+    ///
+    /// [blosc2_schunk]: blosc2_sys::blosc2_schunk
+    pub struct SChunk(pub(crate) *mut ffi::blosc2_schunk);
+
+    // Loosely inspired by blosc2-python implementation
+    impl SChunk {
+        pub fn new(storage: Storage) -> Self {
+            let mut storage = storage;
+            let schunk = unsafe { ffi::blosc2_schunk_new(&mut storage.0) };
+            Self(schunk)
+        }
+
+        #[inline]
+        pub(crate) fn inner(&self) -> &ffi::blosc2_schunk {
+            unsafe { &(*self.0) }
+        }
+
+        #[inline]
+        #[allow(dead_code)]
+        pub(crate) fn inner_mut(&mut self) -> &mut ffi::blosc2_schunk {
+            unsafe { &mut (*self.0) }
+        }
+
+        /// Append data to SChunk, returning new number of chunks
+        #[inline]
+        pub fn append_buffer<T>(&mut self, data: &[T]) -> Result<usize> {
+            if data.is_empty() {
+                return Ok(self.inner().nchunks as usize);
+            }
+
+            let size = std::mem::size_of_val(unsafe { &data.get_unchecked(0) });
+            let typesize = self.inner().typesize as _;
+            if size != typesize {
+                let msg = format!("Size of T ({}) != schunk typesize ({})", size, typesize);
+                return Err(msg.into());
+            }
+            self.append_buffer_unchecked(data)
+        }
+
+        /// Same as `append_buffer` but will not do any preliminary checks for matching typesize
+        /// or if input buffer is empty.
+        #[inline]
+        pub fn append_buffer_unchecked<T>(&mut self, data: &[T]) -> Result<usize> {
+            let n = unsafe {
+                ffi::blosc2_schunk_append_buffer(self.0, data.as_ptr() as _, data.len() as _)
+            };
+            if n < 0 {
+                return Err(Blosc2Error::from(n as i32).into());
+            }
+            Ok(n as _)
+        }
+
+        /// Decompress a chunk, returning number of bytes written to output buffer
+        #[inline]
+        pub fn decompress_chunk<T>(&mut self, nchunk: usize, dst: &mut [T]) -> Result<usize> {
+            let chunk = Chunk::from_schunk(self, nchunk)?;
+            let info = chunk.info()?;
+            if dst.len() < info.nbytes as usize {
+                let msg = format!(
+                    "Not large enough, need {} but got {}",
+                    info.nbytes,
+                    dst.len()
+                );
+                return Err(msg.into());
+            }
+
+            let ptr = dst.as_mut_ptr() as _;
+            let size = unsafe {
+                ffi::blosc2_schunk_decompress_chunk(self.0, nchunk as _, ptr, info.nbytes as _)
+            };
+
+            if size < 0 {
+                return Err(Blosc2Error::from(size).into());
+            } else if size == 0 {
+                let msg = format!("Non-initialized error decompressing chunk '{}'", nchunk);
+                return Err(msg.into());
+            } else {
+                Ok(size as _)
+            }
+        }
+
+        /// Export this `SChunk` into a buffer
+        pub fn into_vec(self) -> Result<Vec<u8>> {
+            let mut needs_free = true;
+            let mut ptr: *mut u8 = std::ptr::null_mut();
+            let len = unsafe { ffi::blosc2_schunk_to_buffer(self.0, &mut ptr, &mut needs_free) };
+            if len < 0 {
+                return Err(Blosc2Error::from(len as i32).into());
+            }
+
+            let mut buf = unsafe { Vec::from_raw_parts(ptr, len as _, len as _) };
+            if needs_free {
+                buf = buf.clone(); // Clone into new since blosc is about to free this one
+                unsafe { ffi::free(ptr as _) };
+            }
+            Ok(buf)
+        }
+
+        /// Create a Schunk from an owned `Vec<u8>`. Data will be owned by the Schunk and released
+        /// via normal Rust semantics.
+        pub fn from_vec(buf: Vec<u8>) -> Result<Self> {
+            let mut buf = buf;
+            let schunk =
+                unsafe { ffi::blosc2_schunk_from_buffer(buf.as_mut_ptr(), buf.len() as _, false) };
+
+            // copy is false, schunk/blosc2 takes ownership, and set that it'll be responsible to free it
+            std::mem::forget(buf);
+            unsafe { ffi::blosc2_schunk_avoid_cframe_free(schunk, false) };
+            Ok(Self(schunk))
+        }
+
+        /// Create a Schunk from a slice. The data _will not be copied_ but the slice used as the
+        /// underlying schunk cframe.
+        pub fn from_slice(buf: &mut [u8]) -> Result<Self> {
+            // schunk is a view of the slice, so copy is false and set to avoid freeing the buffer
+            let schunk =
+                unsafe { ffi::blosc2_schunk_from_buffer(buf.as_mut_ptr(), buf.len() as _, false) };
+            if schunk.is_null() {
+                return Err("Failed to get schunk from buffer".into());
+            }
+            unsafe { ffi::blosc2_schunk_avoid_cframe_free(schunk, true) };
+            Ok(Self(schunk))
+        }
+
+        // --- PROPERTIES ---
+
+        /// Check if storage of Schunk is contiguous.
+        pub fn is_contiguous(&self) -> bool {
+            unsafe { (*(self.inner()).storage).contiguous }
+        }
+
+        /// Check typesize
+        pub fn typesize(&self) -> usize {
+            self.inner().typesize as _
+        }
+
+        /// Compression ratio of the Schunk
+        pub fn compression_ratio(&self) -> f32 {
+            if self.inner().cbytes == 0 {
+                return 0f32;
+            }
+            self.inner().nbytes as f32 / self.inner().cbytes as f32
+        }
+
+        /// Number of chunks
+        pub fn n_chunks(&self) -> usize {
+            self.inner().nchunks as _
+        }
+
+        /// Chunk shape
+        pub fn chunk_shape(&self) -> usize {
+            (self.inner().chunksize / self.inner().typesize) as _
+        }
+
+        /// blocksize
+        pub fn blocksize(&self) -> usize {
+            self.inner().blocksize as _
+        }
+
+        /// Count of uncompressed bytes
+        pub fn nbytes(&self) -> usize {
+            self.inner().nbytes as _
+        }
+
+        /// Count of compressed bytes
+        pub fn cbytes(&self) -> usize {
+            self.inner().cbytes as _
+        }
+
+        /// Path where the Schunk is stored, if file backed.
+        pub fn path(&self) -> Option<std::path::PathBuf> {
+            let urlpath_ptr = unsafe { (*(self.inner().storage)).urlpath };
+            if urlpath_ptr.is_null() {
+                return None;
+            }
+            let urlpath = unsafe { CStr::from_ptr(urlpath_ptr) };
+            urlpath.to_str().map(PathBuf::from).ok()
+        }
+
+        /// Returns under of elements in Schunk (nbytes / typesize)
+        pub fn len(&self) -> usize {
+            (self.inner().nbytes / self.inner().typesize as i64) as usize
+        }
+    }
+
+    impl io::Write for SChunk {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.append_buffer(buf)
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// struct only used for wrapping a mutable reference to a `SChunk`
+    /// to support `std::io::Read` decoding for a SChunk.
+    ///
+    /// This isn't needed for encoding `std::io::Write` since we can directly
+    /// write buffers into SChunk. However, for `Read`, we can't be certain the
+    /// decompressed chunks will fit into the supplied `&mut [u8]` buffer provided
+    /// during `Read::read`. So this struct exists only to hold those intermediate
+    /// buffer and position variables and not clutter `SChunk` implementation.
+    pub struct SChunkDecoder<'schunk> {
+        pub(crate) schunk: &'schunk mut SChunk,
+        pub(crate) buf: io::Cursor<Vec<u8>>,
+        pub(crate) nchunk: usize,
+    }
+    impl<'schunk> SChunkDecoder<'schunk> {
+        pub fn new(schunk: &'schunk mut SChunk) -> Self {
+            Self {
+                schunk,
+                buf: io::Cursor::new(vec![]),
+                nchunk: 0,
+            }
+        }
+    }
+
+    impl<'schunk> io::Read for SChunkDecoder<'schunk> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            // Cursor is at end of buffer, so we can refill
+            if self.buf.position() as usize == self.buf.get_ref().len() {
+                if self.nchunk >= self.schunk.n_chunks() {
+                    return Ok(0);
+                }
+                self.buf.get_mut().truncate(0);
+                self.buf.set_position(0);
+
+                // Get chunk and check if we can decompress directly into caller's buffer
+                let chunk = Chunk::from_schunk(self.schunk, self.nchunk)
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                let nbytes = chunk
+                    .info()
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?
+                    .nbytes();
+
+                if nbytes <= buf.len() {
+                    self.schunk
+                        .decompress_chunk(self.nchunk, buf)
+                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                    self.nchunk += 1;
+                    return Ok(nbytes);
+                } else {
+                    self.buf.get_mut().resize(nbytes as _, 0u8);
+                    let nbytes_written = self
+                        .schunk
+                        .decompress_chunk(self.nchunk, self.buf.get_mut().as_mut_slice())
+                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+
+                    // These should always be equal, otherwise blosc2 gave the wrong expected
+                    // uncompressed size of this chunk.
+                    debug_assert_eq!(nbytes_written, nbytes);
+                }
+                self.nchunk += 1;
+            }
+            self.buf.read(buf)
+        }
+    }
+}
 
 pub mod read {
-    ///! NOTE: These De/compressors are different from the blosc2 schunk. There are no frames, meta
-    ///! layers, etc. It's _only_ meant for one or more independently compressed blocks. No more, no
-    ///! less. If you're wanting `schunk` then hop over to the `crate::schunk` module(s).
+    //! NOTE: These De/compressors are different from the blosc2 schunk. There are no frames, meta
+    //! layers, etc. It's _only_ meant for one or more independently compressed blocks. No more, no
+    //! less. If you're wanting `schunk` then hop over to the [schunk] module.
+    //!
+    //! [schunk]: crate::schunk
     use super::*;
 
     pub struct Decompressor<R: std::io::Read> {
@@ -247,23 +620,56 @@ pub mod read {
     }
 }
 
+/// Wrapper to [blosc2_cparams].  
+/// Compression parameters.
+///
+/// A normal way to construct this is using `std::convert::From<&T>(val)`
+/// so it will create with default parameters and the correct `typesize`.
+///
+/// Example
+/// -------
+/// ```
+/// use blosc2::CParams;
+/// let values = vec![0, 1, 2, 3];
+/// let cparams = CParams::from(&values[0])
+///     .set_threads(2);  // Optionally adjust default values
+/// ```
+/// [blosc2_cparams]: blosc2_sys::blosc2_cparams
 pub struct CParams(ffi::blosc2_cparams);
 
 impl CParams {
-    pub fn into_inner(self) -> ffi::blosc2_cparams {
+    pub(crate) fn into_inner(self) -> ffi::blosc2_cparams {
         self.0
     }
-    pub fn inner_ref_mut(&mut self) -> &mut ffi::blosc2_cparams {
+    #[allow(dead_code)]
+    pub(crate) fn inner_ref_mut(&mut self) -> &mut ffi::blosc2_cparams {
         &mut self.0
     }
-    pub fn set_codec(&mut self, codec: Codec) {
+    /// Set codec, defaults to [Codec::BloscLz]
+    ///
+    /// [Codec::BloscLz]: crate::Codec::BloscLz
+    pub fn set_codec(mut self, codec: Codec) -> Self {
         self.0.compcode = codec as _;
+        self
     }
-    pub fn set_clevel(&mut self, clevel: i32) {
+    /// Set clevel, defaults to [CLevel::Nine]
+    ///
+    /// [CLevel::Nine]: crate::CLevel::Nine
+    pub fn set_clevel(mut self, clevel: CLevel) -> Self {
         self.0.clevel = clevel as _;
+        self
     }
-    pub fn set_filter(&mut self, filter: Filter) {
+    /// Set filter, defaults to [Filter::Shuffle]
+    ///
+    /// [Filter::Shuffle]: crate::Filter::Shuffle
+    pub fn set_filter(mut self, filter: Filter) -> Self {
         self.0.filters[ffi::BLOSC2_MAX_FILTERS as usize - 1] = filter as _;
+        self
+    }
+    /// Set number of threads, defaults to 1
+    pub fn set_threads(mut self, n: usize) -> Self {
+        self.0.nthreads = n as _;
+        self
     }
 }
 
@@ -290,11 +696,25 @@ impl<T> From<&T> for CParams {
     }
 }
 
+/// Wrapper to [blosc2_dparams].  
+/// Decompression parameters, normally constructed via `DParams::default()`.
+///
+/// Example
+/// -------
+/// ```
+/// use blosc2::DParams;
+/// let dparams = DParams::default()
+///     .set_threads(2);  // Optionally adjust default values
+/// ```
+///
+/// [blosc2_dparams]: blosc2_sys::blosc2_dparams
 pub struct DParams(pub(crate) ffi::blosc2_dparams);
 
 impl DParams {
-    pub fn set_n_threads(&mut self, n: usize) {
+    /// Set number of theads for decompression, defaults to 1
+    pub fn set_threads(mut self, n: usize) -> Self {
         self.0.nthreads = n as _;
+        self
     }
 }
 
@@ -307,7 +727,10 @@ impl Default for DParams {
     }
 }
 
+/// Wrapper to [blosc2_context].  
 /// Container struct for de/compression ops requiring context when used in multithreaded environments
+///
+/// [blosc2_context]: blosc2_sys::blosc2_context
 #[derive(Clone)]
 pub struct Context(pub(crate) *mut ffi::blosc2_context);
 
@@ -341,12 +764,24 @@ impl Drop for Context {
 /// Normal construction via `CompressedBufferInfo::try_from(&[u8])?`
 pub struct CompressedBufferInfo {
     /// Number of bytes decompressed
-    pub nbytes: usize,
+    nbytes: usize,
     /// Number of bytes to be read from compressed buffer
-    pub cbytes: usize,
+    cbytes: usize,
     /// Used internally by blosc2 when compressing the blocks, exposed here for completion.
     /// You probably won't need it.
-    pub blocksize: usize,
+    blocksize: usize,
+}
+
+impl CompressedBufferInfo {
+    pub fn nbytes(&self) -> usize {
+        self.nbytes
+    }
+    pub fn cbytes(&self) -> usize {
+        self.cbytes
+    }
+    pub fn blocksize(&self) -> usize {
+        self.blocksize
+    }
 }
 
 impl<T> TryFrom<&[T]> for CompressedBufferInfo {
@@ -366,7 +801,7 @@ impl<T> TryFrom<&[T]> for CompressedBufferInfo {
             )
         };
         if code < 0 {
-            return Err(format!("Failed to decompress, exit code: '{}'", code).into());
+            return Err(Blosc2Error::from(code).into());
         }
         Ok(CompressedBufferInfo {
             nbytes: nbytes as _,
@@ -408,7 +843,7 @@ pub fn compress_into_ctx<T: Clone>(src: &[T], dst: &mut [T], ctx: &mut Context) 
     if size == 0 {
         return Err(format!("Buffer is incompressible").into());
     } else if size < 0 {
-        return Err(format!("Failed to compress, exit code '{}' from blosc2", size).into());
+        return Err(Blosc2Error::from(size).into());
     }
     Ok(size as _)
 }
@@ -459,7 +894,7 @@ pub fn compress_into<T>(
         )
     };
     if n_bytes < 0 {
-        return Err(format!("Failed to compress, exit code '{}' from blosc2", n_bytes).into());
+        return Err(Blosc2Error::from(n_bytes).into());
     } else if n_bytes == 0 {
         return Err("Data is not compressable.".into());
     }
@@ -496,7 +931,7 @@ pub fn decompress_into_ctx<T: Clone>(src: &[T], dst: &mut [T], ctx: &mut Context
         )
     };
     if n_bytes < 0 {
-        return Err(format!("Failed to compress buffer, return code: '{}'", n_bytes).into());
+        return Err(Blosc2Error::from(n_bytes).into());
     }
     Ok(n_bytes as _)
 }
@@ -526,7 +961,7 @@ pub fn decompress_into<T>(src: &[T], dst: &mut [T]) -> Result<usize> {
         )
     };
     if n_bytes < 0 {
-        return Err(format!("Failed to decompress, exit code: '{}'", n_bytes).into());
+        return Err(Blosc2Error::from(n_bytes).into());
     }
     Ok(n_bytes as _)
 }
@@ -537,21 +972,146 @@ pub fn set_compressor(codec: Codec) -> Result<()> {
         Codec::BloscLz => CString::new("blosclz").unwrap(),
         _ => unimplemented!("Only blosclz codec supported for now"),
     };
-    if unsafe { ffi::blosc1_set_compressor(codec.as_ptr()) } < 0 {
-        Err(format!("The codec '{:?}' is not available", codec).into())
+    let rc = unsafe { ffi::blosc1_set_compressor(codec.as_ptr()) };
+    if rc < 0 {
+        Err(Blosc2Error::from(rc).into())
     } else {
         Ok(())
     }
 }
 
 /// Call before using blosc2, unless using specific ctx de/compression variants
-pub fn blosc2_init() {
+pub fn init() {
     unsafe { ffi::blosc2_init() }
 }
 
 /// Call at end of using blosc2 library, unless you've never called `blosc2_init`
-pub fn blosc2_destroy() {
+pub fn destroy() {
     unsafe { ffi::blosc2_destroy() }
+}
+
+/// Possible errors arising from Blosc2 library
+#[derive(Debug)]
+#[repr(i32)]
+pub enum Blosc2Error {
+    /// Generic failure
+    Failure = ffi::BLOSC2_ERROR_FAILURE,
+    /// Bad stream
+    Stream = ffi::BLOSC2_ERROR_STREAM,
+    /// Invalid data
+    Data = ffi::BLOSC2_ERROR_DATA,
+    /// Memory alloc/realloc failure
+    MemoryAlloc = ffi::BLOSC2_ERROR_MEMORY_ALLOC,
+    /// Not enough space to read
+    ReadBuffer = ffi::BLOSC2_ERROR_READ_BUFFER,
+    /// Not enough space to write
+    WriteBuffer = ffi::BLOSC2_ERROR_WRITE_BUFFER,
+    /// Codec not supported
+    CodecSupport = ffi::BLOSC2_ERROR_CODEC_SUPPORT,
+    /// Invalid parameter supplied to codec
+    CodecParam = ffi::BLOSC2_ERROR_CODEC_PARAM,
+    /// Codec dictionary error
+    CodecDict = ffi::BLOSC2_ERROR_CODEC_DICT,
+    /// Version not supported
+    VersionSupport = ffi::BLOSC2_ERROR_VERSION_SUPPORT,
+    /// Invalid value in header
+    InvalidHeader = ffi::BLOSC2_ERROR_INVALID_HEADER,
+    /// Invalid parameter supplied to function
+    InvalidParam = ffi::BLOSC2_ERROR_INVALID_PARAM,
+    /// File read failure
+    FileRead = ffi::BLOSC2_ERROR_FILE_READ,
+    /// File write failure
+    FileWrite = ffi::BLOSC2_ERROR_FILE_WRITE,
+    /// File open failure
+    FileOpen = ffi::BLOSC2_ERROR_FILE_OPEN,
+    /// Not found
+    NotFound = ffi::BLOSC2_ERROR_NOT_FOUND,
+    /// Bad run length encoding
+    RunLength = ffi::BLOSC2_ERROR_RUN_LENGTH,
+    /// Filter pipeline error
+    FilterPipeline = ffi::BLOSC2_ERROR_FILTER_PIPELINE,
+    /// Chunk insert failure
+    ChunkInsert = ffi::BLOSC2_ERROR_CHUNK_INSERT,
+    /// Chunk append failure
+    ChunkAppend = ffi::BLOSC2_ERROR_CHUNK_APPEND,
+    /// Chunk update failure
+    ChunkUpdate = ffi::BLOSC2_ERROR_CHUNK_UPDATE,
+    /// Sizes larger than 2gb not supported
+    TwoGBLimit = ffi::BLOSC2_ERROR_2GB_LIMIT,
+    /// Super-chunk copy failure
+    SchunkCopy = ffi::BLOSC2_ERROR_SCHUNK_COPY,
+    /// Wrong type for frame
+    FrameType = ffi::BLOSC2_ERROR_FRAME_TYPE,
+    /// File truncate failure
+    FileTruncate = ffi::BLOSC2_ERROR_FILE_TRUNCATE,
+    /// Thread or thread context creation failure
+    ThreadCreate = ffi::BLOSC2_ERROR_THREAD_CREATE,
+    /// Postfilter failure
+    PostFilter = ffi::BLOSC2_ERROR_POSTFILTER,
+    /// Special frame failure
+    FrameSpecial = ffi::BLOSC2_ERROR_FRAME_SPECIAL,
+    /// Special super-chunk failure
+    SchunkSpecial = ffi::BLOSC2_ERROR_SCHUNK_SPECIAL,
+    /// IO plugin error
+    PluginIO = ffi::BLOSC2_ERROR_PLUGIN_IO,
+    /// Remove file failure
+    FileRemove = ffi::BLOSC2_ERROR_FILE_REMOVE,
+    /// Pointer is null
+    NullPointer = ffi::BLOSC2_ERROR_NULL_POINTER,
+    /// Invalid index
+    InvalidIndex = ffi::BLOSC2_ERROR_INVALID_INDEX,
+    /// Metalayer has not been found
+    MetalayerNotFound = ffi::BLOSC2_ERROR_METALAYER_NOT_FOUND,
+}
+
+impl std::fmt::Display for Blosc2Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for Blosc2Error {}
+
+impl From<i32> for Blosc2Error {
+    fn from(code: i32) -> Self {
+        match code {
+            ffi::BLOSC2_ERROR_FAILURE => Blosc2Error::Failure,
+            ffi::BLOSC2_ERROR_STREAM => Blosc2Error::Stream,
+            ffi::BLOSC2_ERROR_DATA => Blosc2Error::Data,
+            ffi::BLOSC2_ERROR_MEMORY_ALLOC => Blosc2Error::MemoryAlloc,
+            ffi::BLOSC2_ERROR_READ_BUFFER => Blosc2Error::ReadBuffer,
+            ffi::BLOSC2_ERROR_WRITE_BUFFER => Blosc2Error::WriteBuffer,
+            ffi::BLOSC2_ERROR_CODEC_SUPPORT => Blosc2Error::CodecSupport,
+            ffi::BLOSC2_ERROR_CODEC_PARAM => Blosc2Error::CodecParam,
+            ffi::BLOSC2_ERROR_CODEC_DICT => Blosc2Error::CodecDict,
+            ffi::BLOSC2_ERROR_VERSION_SUPPORT => Blosc2Error::VersionSupport,
+            ffi::BLOSC2_ERROR_INVALID_HEADER => Blosc2Error::InvalidHeader,
+            ffi::BLOSC2_ERROR_INVALID_PARAM => Blosc2Error::InvalidParam,
+            ffi::BLOSC2_ERROR_FILE_READ => Blosc2Error::FileRead,
+            ffi::BLOSC2_ERROR_FILE_WRITE => Blosc2Error::FileWrite,
+            ffi::BLOSC2_ERROR_FILE_OPEN => Blosc2Error::FileOpen,
+            ffi::BLOSC2_ERROR_NOT_FOUND => Blosc2Error::NotFound,
+            ffi::BLOSC2_ERROR_RUN_LENGTH => Blosc2Error::RunLength,
+            ffi::BLOSC2_ERROR_FILTER_PIPELINE => Blosc2Error::FilterPipeline,
+            ffi::BLOSC2_ERROR_CHUNK_INSERT => Blosc2Error::ChunkInsert,
+            ffi::BLOSC2_ERROR_CHUNK_APPEND => Blosc2Error::ChunkAppend,
+            ffi::BLOSC2_ERROR_CHUNK_UPDATE => Blosc2Error::ChunkUpdate,
+            ffi::BLOSC2_ERROR_2GB_LIMIT => Blosc2Error::TwoGBLimit,
+            ffi::BLOSC2_ERROR_SCHUNK_COPY => Blosc2Error::SchunkCopy,
+            ffi::BLOSC2_ERROR_FRAME_TYPE => Blosc2Error::FrameType,
+            ffi::BLOSC2_ERROR_FILE_TRUNCATE => Blosc2Error::FileTruncate,
+            ffi::BLOSC2_ERROR_THREAD_CREATE => Blosc2Error::ThreadCreate,
+            ffi::BLOSC2_ERROR_POSTFILTER => Blosc2Error::PostFilter,
+            ffi::BLOSC2_ERROR_FRAME_SPECIAL => Blosc2Error::FrameSpecial,
+            ffi::BLOSC2_ERROR_SCHUNK_SPECIAL => Blosc2Error::SchunkSpecial,
+            ffi::BLOSC2_ERROR_PLUGIN_IO => Blosc2Error::PluginIO,
+            ffi::BLOSC2_ERROR_FILE_REMOVE => Blosc2Error::FileRemove,
+            ffi::BLOSC2_ERROR_NULL_POINTER => Blosc2Error::NullPointer,
+            ffi::BLOSC2_ERROR_INVALID_INDEX => Blosc2Error::InvalidIndex,
+            ffi::BLOSC2_ERROR_METALAYER_NOT_FOUND => Blosc2Error::MetalayerNotFound,
+            _ => panic!("Error code {} not matched in existing Error codes", code),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -562,13 +1122,13 @@ mod tests {
     use super::*;
 
     #[ctor]
-    fn init() {
-        blosc2_init();
+    fn blosc2_init() {
+        init();
     }
 
     #[dtor]
-    fn destory() {
-        blosc2_destroy();
+    fn blosc2_destory() {
+        destroy();
     }
 
     #[test]
@@ -697,6 +1257,67 @@ mod tests {
         assert_eq!(n_decompressed as usize, stream.len());
 
         assert_eq!(&decompressed, &stream);
+        Ok(())
+    }
+
+    #[test]
+    fn test_schunk_basic() -> Result<()> {
+        let input = b"some data";
+        let storage = schunk::Storage::default()
+            .set_contiguous(true)
+            .set_cparams(&mut CParams::from(&input[0]))
+            .set_dparams(&mut DParams::default());
+        let mut schunk = schunk::SChunk::new(storage);
+
+        assert!(schunk.is_contiguous());
+        assert_eq!(schunk.typesize(), 8);
+        assert!(schunk.path().is_none());
+
+        let mut decompressed = vec![0u8; input.len()];
+
+        let n = schunk.append_buffer(input)?;
+        schunk.decompress_chunk(n - 1, &mut decompressed)?;
+        assert_eq!(input, decompressed.as_slice());
+
+        // Reconstruct thru slice
+        let mut v = schunk.into_vec()?;
+        {
+            schunk = schunk::SChunk::from_slice(&mut v)?;
+            assert_eq!(schunk.n_chunks(), 1);
+        }
+
+        // Reconstruct thru vec
+        schunk = schunk::SChunk::from_vec(v)?;
+        assert_eq!(schunk.n_chunks(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_schunk_write() -> Result<()> {
+        let input = std::iter::repeat(b"some data")
+            .take(BUFSIZE)
+            .flat_map(|v| v.to_vec())
+            .collect::<Vec<u8>>();
+        let storage = schunk::Storage::default()
+            .set_contiguous(true)
+            .set_cparams(&mut CParams::from(&input[0]))
+            .set_dparams(&mut DParams::default());
+        let mut schunk = schunk::SChunk::new(storage);
+
+        let nbytes = std::io::copy(&mut Cursor::new(input.clone()), &mut schunk)?;
+        assert_eq!(nbytes as usize, input.len());
+
+        let ratio = schunk.compression_ratio(); // ~36.
+        assert!(35. < ratio);
+        assert!(37. > ratio);
+
+        let mut uncompressed = vec![];
+        let mut decoder = schunk::SChunkDecoder::new(&mut schunk);
+        let n = std::io::copy(&mut decoder, &mut uncompressed)?;
+        assert_eq!(input, uncompressed.as_slice());
+        assert_eq!(n as usize, input.len());
+
         Ok(())
     }
 }

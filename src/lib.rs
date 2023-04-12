@@ -389,7 +389,7 @@ pub mod schunk {
     /// struct only used for wrapping a mutable reference to a `SChunk`
     /// to support `std::io::Read` decoding for a SChunk.
     ///
-    /// This isn't needed for encoding/ `std::io::Write` since we can directly
+    /// This isn't needed for encoding `std::io::Write` since we can directly
     /// write buffers into SChunk. However, for `Read`, we can't be certain the
     /// decompressed chunks will fit into the supplied `&mut [u8]` buffer provided
     /// during `Read::read`. So this struct exists only to hold those intermediate
@@ -425,7 +425,7 @@ pub mod schunk {
                 let nbytes = chunk
                     .info()
                     .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?
-                    .nbytes;
+                    .nbytes();
 
                 if nbytes <= buf.len() {
                     self.schunk

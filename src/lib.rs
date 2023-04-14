@@ -220,7 +220,7 @@ pub mod schunk {
                 return Ok(self.inner().nchunks as usize);
             }
 
-            let size = std::mem::size_of_val(unsafe { &data.get_unchecked(0) });
+            let size = std::mem::size_of::<T>();
             let typesize = self.inner().typesize as _;
             if size != typesize {
                 let msg = format!("Size of T ({}) != schunk typesize ({})", size, typesize);
@@ -689,9 +689,9 @@ impl Default for CParams {
 
 /// Create CParams from a reference to the type being compressed
 impl<T> From<&T> for CParams {
-    fn from(val: &T) -> Self {
+    fn from(_: &T) -> Self {
         let mut cparams = CParams::default();
-        cparams.0.typesize = (std::mem::size_of_val(val) * 8) as _;
+        cparams.0.typesize = std::mem::size_of::<T>() as _;
         cparams
     }
 }
@@ -880,7 +880,7 @@ pub fn compress_into<T>(
     if src.is_empty() {
         return Ok(0);
     }
-    let typesize = std::mem::size_of_val(&src[0]) * 8;
+    let typesize = std::mem::size_of::<T>();
     set_compressor(codec)?;
     let n_bytes = unsafe {
         ffi::blosc2_compress(
@@ -978,6 +978,11 @@ pub fn set_compressor(codec: Codec) -> Result<()> {
     } else {
         Ok(())
     }
+}
+
+pub fn set_nthreads(nthreads: usize) -> usize {
+    let n = unsafe { ffi::blosc2_set_nthreads(nthreads as _) };
+    n as _
 }
 
 /// Call before using blosc2, unless using specific ctx de/compression variants
@@ -1249,7 +1254,7 @@ mod tests {
         let mut compressed = vec![];
         let mut compressor = read::Compressor::new(Cursor::new(stream.clone()));
         let n_compressed = std::io::copy(&mut compressor, &mut compressed)?;
-        assert_eq!(n_compressed, 2496);
+        assert_eq!(n_compressed, 1020);
 
         let mut decompressed = vec![];
         let mut decompressor = read::Decompressor::new(Cursor::new(compressed));
@@ -1270,7 +1275,7 @@ mod tests {
         let mut schunk = schunk::SChunk::new(storage);
 
         assert!(schunk.is_contiguous());
-        assert_eq!(schunk.typesize(), 8);
+        assert_eq!(schunk.typesize(), 1);
         assert!(schunk.path().is_none());
 
         let mut decompressed = vec![0u8; input.len()];
@@ -1309,8 +1314,8 @@ mod tests {
         assert_eq!(nbytes as usize, input.len());
 
         let ratio = schunk.compression_ratio(); // ~36.
-        assert!(35. < ratio);
-        assert!(37. > ratio);
+        assert!(84. < ratio);
+        assert!(86. > ratio);
 
         let mut uncompressed = vec![];
         let mut decoder = schunk::SChunkDecoder::new(&mut schunk);

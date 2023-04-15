@@ -14,15 +14,15 @@ fn main() {
     //     .always_configure(true)
     //     .build();
 
-    println!("cargo:rustc-link-search=/home/milesg/mambaforge/envs/cramjam/lib64");
+    // println!("cargo:rustc-link-search=/home/milesg/mambaforge/envs/cramjam/lib64");
+    println!(
+        "cargo:rustc-link-search={}/c-blosc2/install/lib64",
+        env!("CARGO_MANIFEST_DIR")
+    );
 
     // println!("cargo:rustc-link-search=native={}/lib64", lib.display());
     // println!("cargo:rustc-link-search=native={}/lib", lib.display());
     println!("cargo:rustc-link-lib=static=blosc2");
-    // println!(
-    //     "cargo:rustc-link-search={}/c-blosc2/install/lib64",
-    //     env!("CARGO_MANIFEST_DIR")
-    // );
 
     let out = PathBuf::from(&(format!("{}/bindings.rs", std::env::var("OUT_DIR").unwrap())));
     bindgen::Builder::default()

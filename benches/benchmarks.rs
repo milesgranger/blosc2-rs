@@ -3,6 +3,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::fs;
 
 fn criterion_benchmark(c: &mut Criterion) {
+    init();
     fs::read_dir(format!("{}/data", env!("CARGO_MANIFEST_DIR")))
         .unwrap()
         .filter(|f| {
@@ -18,7 +19,8 @@ fn criterion_benchmark(c: &mut Criterion) {
                 &format!("compress - defaults - {}", name.to_str().unwrap()),
                 |b| b.iter(|| compress(black_box(&data), None, None, None)),
             );
-        })
+        });
+    destroy();
 }
 
 criterion_group!(benches, criterion_benchmark);

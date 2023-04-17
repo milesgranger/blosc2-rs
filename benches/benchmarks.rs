@@ -1,11 +1,57 @@
-use blosc2::{compress, decompress, destroy, init, CParams, DParams};
+use blosc2::{compress, decompress, destroy, init};
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
-use std::{ffi::OsString, fs};
+use std::fs;
 
 fn criterion_benchmark(c: &mut Criterion) {
     init();
 
-    let data: Vec<(OsString, Vec<u8>)> =
+    let data = build_data();
+
+    // Compress
+    {
+        let mut compression_group = c.benchmark_group("compress");
+        data.iter().for_each(|(name, data)| {
+            compression_group.throughput(Throughput::Bytes(data.len() as _));
+            compression_group.bench_function(name, |b| {
+                b.iter(|| compress(black_box(&data), None, None, None).unwrap())
+            });
+        });
+    }
+
+    // Decompress
+    {
+        let mut decompression_group = c.benchmark_group("decompress");
+        data.iter().for_each(|(name, data)| {
+            let compressed = compress(&data, None, None, None).unwrap();
+
+            decompression_group.throughput(Throughput::Bytes(compressed.len() as _));
+            decompression_group.bench_function(name, |b| {
+                b.iter(|| decompress(black_box(&compressed)).unwrap())
+            });
+        });
+    }
+
+    // Roundtrip
+    {
+        let mut roundtrip_group = c.benchmark_group("roundtrip");
+        data.iter().for_each(|(name, data)| {
+            roundtrip_group.throughput(Throughput::Bytes(data.len() as _));
+            roundtrip_group.bench_function(name, |b| {
+                b.iter(|| {
+                    decompress(&compress(black_box(&data), None, None, None).unwrap()).unwrap()
+                })
+            });
+        });
+    }
+
+    destroy();
+}
+
+criterion_group!(benches, criterion_benchmark);
+criterion_main!(benches);
+
+fn build_data() -> Vec<(String, Vec<u8>)> {
+    let mut data: Vec<(String, Vec<u8>)> =
         fs::read_dir(format!("{}/data", env!("CARGO_MANIFEST_DIR")))
             .unwrap()
             .filter(|f| {
@@ -15,37 +61,32 @@ fn criterion_benchmark(c: &mut Criterion) {
                     .is_some()
             })
             .map(|f| {
-                let name = f.as_ref().unwrap().file_name().to_owned();
+                let name = f
+                    .as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_owned()
+                    .into_string()
+                    .unwrap();
                 let data = fs::read(f.unwrap().path()).unwrap();
                 (name, data)
             })
             .collect();
-
-    let mut compression_group = c.benchmark_group("compress");
-
-    // Compress all data, then file-by-file
-    let all_data = data
-        .iter()
-        .map(|(_, d)| d.clone())
-        .flatten()
-        .collect::<Vec<u8>>();
-    compression_group.throughput(Throughput::Bytes(all_data.len() as _));
-    compression_group.bench_function("defaults - all-data", |b| {
-        b.iter(|| compress(black_box(&all_data), None, None, None))
-    });
-    data.iter().for_each(|(name, data)| {
-        compression_group.throughput(Throughput::Bytes(data.len() as _));
-        compression_group.bench_function(&format!("defaults - {}", name.to_str().unwrap()), |b| {
-            b.iter(|| compress(black_box(&data), None, None, None))
-        });
-    });
-
-    // TODO: Decompress all data, then file-by-file
-
-    // TODO: Roundtrip all data, then file-by-file
-
-    destroy();
+    data.push((
+        "repeating".to_owned(),
+        std::iter::repeat(b"1234567890")
+            .take(1_000_000)
+            .flat_map(|v| v.to_vec())
+            .collect(),
+    ));
+    // Same length as the repeating data
+    data.push((
+        "random".to_owned(),
+        (0..10_000_000).map(|_| rand::random::<u8>()).collect(),
+    ));
+    data.push((
+        "all-data".to_owned(),
+        data.iter().flat_map(|(_, d)| d.to_owned()).collect(),
+    ));
+    data
 }
-
-criterion_group!(benches, criterion_benchmark);
-criterion_main!(benches);

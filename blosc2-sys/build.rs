@@ -3,14 +3,15 @@ use std::path::PathBuf;
 fn main() {
     let lib = cmake::Config::new("c-blosc2")
         .define("CMAKE_POSITION_INDEPENDENT_CODE", "ON")
-        .define("CMAKE_C_FLAGS", "-fPIE")
+        .define("CMAKE_C_FLAGS", "-Ofast")
+        .define("STATIC_LIB", "ON")
+        .define("SHARED_LIB", "ON")
         .define("BLOSC_INSTALL", "ON")
         .define("BUILD_TESTS", "OFF")
         .define("BUILD_EXAMPLES", "OFF")
         .define("BUILD_BENCHMARKS", "OFF")
         .define("BUILD_FUZZERS", "OFF")
-        .define("STATIC_LIB", "ON")
-        .define("SHARED_LIB", "ON")
+        .always_configure(true)
         .build();
 
     println!("cargo:rustc-link-search={}/lib64", lib.display());

@@ -942,11 +942,21 @@ pub fn decompress<T: Clone>(src: &[T]) -> Result<Vec<T>> {
         return Ok(vec![]);
     }
     let info = CompressedBufferInfo::try_from(src)?;
-    let mut dst = vec![src[0].clone(); info.nbytes];
-    let n_bytes = decompress_into(src, &mut dst)?;
-    if dst.len() > n_bytes {
-        dst.truncate(n_bytes);
+    let mut dst = Vec::with_capacity(info.nbytes);
+
+    let n_bytes = unsafe {
+        ffi::blosc2_decompress(
+            src.as_ptr() as *const c_void,
+            src.len() as _,
+            dst.as_mut_ptr() as *mut c_void,
+            info.nbytes as _,
+        )
+    };
+
+    if n_bytes < 0 {
+        return Err(Blosc2Error::from(n_bytes).into());
     }
+    unsafe { dst.set_len(n_bytes as _) };
     Ok(dst)
 }
 

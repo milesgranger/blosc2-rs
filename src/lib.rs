@@ -817,7 +817,7 @@ pub fn compress_ctx<T: Clone>(src: &[T], ctx: &mut Context) -> Result<Vec<T>> {
     if src.is_empty() {
         return Ok(vec![]);
     }
-    let mut dst = vec![src[0].clone(); src.len() + ffi::BLOSC2_MAX_OVERHEAD as usize];
+    let mut dst = vec![src[0].clone(); max_compress_len(src)];
     let size = compress_into_ctx(src, &mut dst, ctx)?;
     if dst.len() > size {
         dst.truncate(size as _);
@@ -848,6 +848,12 @@ pub fn compress_into_ctx<T: Clone>(src: &[T], dst: &mut [T], ctx: &mut Context) 
     Ok(size as _)
 }
 
+/// Return the max size a compressed buffer needs to be to hold `src`
+#[inline(always)]
+pub fn max_compress_len<T>(src: &[T]) -> usize {
+    src.len() + ffi::BLOSC2_MAX_OVERHEAD as usize
+}
+
 #[inline]
 pub fn compress<T: Clone>(
     src: &[T],
@@ -862,7 +868,7 @@ pub fn compress<T: Clone>(
     let clvl = clevel.unwrap_or_default();
     let fltr = filter.unwrap_or_default();
 
-    let mut dst = vec![src[0].clone(); src.len() + ffi::BLOSC2_MAX_OVERHEAD as usize];
+    let mut dst = vec![src[0].clone(); max_compress_len(src)];
     let n_bytes = compress_into(src, &mut dst, clvl, fltr, cdc)?;
 
     dst.truncate(n_bytes);

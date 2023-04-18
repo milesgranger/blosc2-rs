@@ -1,6 +1,7 @@
 //! Blosc2 Rust bindings.
 
 use std::ffi::c_void;
+use std::ffi::CStr;
 use std::ffi::CString;
 
 use blosc2_sys as ffi;
@@ -1001,6 +1002,42 @@ pub fn set_nthreads(nthreads: usize) -> usize {
     n as _
 }
 
+/// Get the version for a given Codec.
+pub fn get_complib_info(codec: Codec) -> Result<String> {
+    let mut compname = std::ptr::null();
+    let mut complib = std::ptr::null_mut();
+    let mut version = std::ptr::null_mut();
+
+    if unsafe { ffi::blosc2_compcode_to_compname(codec as i32, &mut compname) } == -1 {
+        return Err("Codec not recognized".into());
+    }
+    if unsafe { ffi::blosc2_get_complib_info(compname as _, &mut complib, &mut version) } == -1 {
+        return Err("Codec not supported".into());
+    }
+
+    let info = unsafe {
+        format!(
+            "{}: {}",
+            CString::from_raw(complib)
+                .into_string()
+                .map_err(|e| e.to_string())?,
+            CString::from_raw(version)
+                .into_string()
+                .map_err(|e| e.to_string())?
+        )
+    };
+    Ok(info)
+}
+
+/// Get the Blosc2 version string
+pub fn get_version_string() -> Result<String> {
+    CStr::from_bytes_with_nul(ffi::BLOSC2_VERSION_STRING)
+        .map_err(|e| e.to_string())?
+        .to_str()
+        .map_err(|e| e.to_string().into())
+        .map(|s| s.to_string())
+}
+
 /// Call before using blosc2, unless using specific ctx de/compression variants
 pub fn init() {
     unsafe { ffi::blosc2_init() }
@@ -1339,6 +1376,20 @@ mod tests {
         assert_eq!(input, uncompressed.as_slice());
         assert_eq!(n as usize, input.len());
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_version_string() -> Result<()> {
+        let version = get_version_string()?;
+        assert_eq!(&version, "2.8.0");
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_complib_version_string() -> Result<()> {
+        let info = get_complib_info(Codec::BloscLz)?;
+        assert_eq!(&info, "BloscLZ: 2.5.2");
         Ok(())
     }
 }

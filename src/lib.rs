@@ -219,6 +219,40 @@ pub mod schunk {
             Self { chunk, needs_free }
         }
 
+        /// Create a chunk made of uninitialized values
+        ///
+        /// Example
+        /// -------
+        /// ```
+        /// use blosc2::CParams;
+        /// use blosc2::schunk::Chunk;
+        ///
+        /// let chunk = Chunk::uninit::<u8>(CParams::default(), 10).unwrap();
+        /// assert_eq!(chunk.info().unwrap().nbytes(), 10);
+        /// ```
+        pub fn uninit<T>(cparams: CParams, len: usize) -> Result<Self> {
+            let mut dst: Vec<T> =
+                Vec::with_capacity(len + ffi::BLOSC_EXTENDED_HEADER_LENGTH as usize);
+            if std::mem::size_of::<T>() != cparams.0.typesize as usize {
+                return Err("typesize mismatch between CParams and T".into());
+            }
+            let nbytes = unsafe {
+                ffi::blosc2_chunk_uninit(
+                    cparams.0,
+                    len as _,
+                    dst.as_mut_ptr() as *mut c_void,
+                    dst.capacity() as _,
+                )
+            };
+            if nbytes < 0 {
+                return Err("Failed to create uninitialized chunk".into());
+            }
+            unsafe { dst.set_len(nbytes as _) };
+            let ptr = dst.as_mut_ptr();
+            std::mem::forget(dst);
+            Ok(Self::new(ptr as _, true))
+        }
+
         /// Create a new `Chunk` from a `SChunk`
         #[inline]
         pub fn from_schunk(schunk: &mut SChunk, nchunk: usize) -> Result<Self> {
@@ -755,7 +789,7 @@ impl Default for CParams {
         let mut cparams = ffi::blosc2_cparams::default();
         cparams.compcode = Codec::default() as _;
         cparams.clevel = CLevel::default() as _;
-        cparams.typesize = 8;
+        cparams.typesize = 1;
         cparams.splitmode = ffi::BLOSC_FORWARD_COMPAT_SPLIT as _;
         cparams.filters[ffi::BLOSC2_MAX_FILTERS as usize - 1] = Filter::default() as _;
         cparams.nthreads = 1;

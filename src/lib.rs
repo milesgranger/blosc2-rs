@@ -253,6 +253,41 @@ pub mod schunk {
             Ok(Self::new(ptr as _, true))
         }
 
+        /// Create a chunk made of zeros
+        ///
+        /// Example
+        /// -------
+        /// ```
+        /// use blosc2::CParams;
+        /// use blosc2::schunk::Chunk;
+        ///
+        /// let chunk = Chunk::zeros::<u8>(CParams::default(), 10).unwrap();
+        /// assert_eq!(chunk.info().unwrap().nbytes(), 10);
+        /// ```
+        pub fn zeros<T>(cparams: CParams, len: usize) -> Result<Self> {
+            let mut dst: Vec<T> =
+                Vec::with_capacity(len + ffi::BLOSC_EXTENDED_HEADER_LENGTH as usize);
+            if std::mem::size_of::<T>() != cparams.0.typesize as usize {
+                return Err("typesize mismatch between CParams and T".into());
+            }
+
+            let nbytes = unsafe {
+                ffi::blosc2_chunk_zeros(
+                    cparams.0,
+                    len as _,
+                    dst.as_mut_ptr() as _,
+                    dst.capacity() as _,
+                )
+            };
+            if nbytes < 0 {
+                return Err(Box::new(Blosc2Error::from(nbytes)));
+            }
+            unsafe { dst.set_len(nbytes as _) };
+            let ptr = dst.as_mut_ptr();
+            std::mem::forget(dst);
+            Ok(Self::new(ptr as _, true))
+        }
+
         /// Create a new `Chunk` from a `SChunk`
         #[inline]
         pub fn from_schunk(schunk: &mut SChunk, nchunk: usize) -> Result<Self> {

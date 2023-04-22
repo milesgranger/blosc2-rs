@@ -125,6 +125,14 @@ pub mod schunk {
     /// Wrapper to [blosc2_storage]
     ///
     /// [blosc2_storage]: blosc2_sys::blosc2_storage
+    ///
+    /// Example
+    /// -------
+    /// ```
+    /// use blosc2::schunk::Storage;
+    ///
+    /// let storage = Storage::default().set_urlpath("/some/path.blosc2");
+    /// ```
     #[derive(Default)]
     pub struct Storage(ffi::blosc2_storage);
 
@@ -134,6 +142,27 @@ pub mod schunk {
             self.0.urlpath =
                 CString::new(urlpath.as_ref().to_string_lossy().to_string())?.into_raw();
             Ok(self)
+        }
+        /// Reference to the urlpath (if any)
+        ///
+        /// Example
+        /// -------
+        /// ```
+        /// use blosc2::schunk::Storage;
+        ///
+        /// let storage = Storage::default().set_urlpath("/some/path.blosc2").unwrap();
+        /// assert_eq!(storage.get_urlpath().unwrap().unwrap(), "/some/path.blosc2");
+        /// ```
+        pub fn get_urlpath(&self) -> Result<Option<&str>> {
+            if self.0.urlpath.is_null() {
+                return Ok(None);
+            }
+            unsafe {
+                CStr::from_ptr(self.0.urlpath)
+                    .to_str()
+                    .map(|v| Some(v))
+                    .map_err(Into::into)
+            }
         }
         /// Set the contiguous nature of the `schunk`.
         pub fn set_contiguous(mut self, contiguous: bool) -> Self {

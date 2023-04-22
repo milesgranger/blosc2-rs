@@ -42,6 +42,50 @@ pub enum Codec {
     LastRegisteredCodec = ffi::BLOSC_LAST_REGISTERED_CODEC as _,
 }
 
+impl TryInto<String> for Codec {
+    type Error = Box<dyn std::error::Error>;
+    fn try_into(self) -> Result<String> {
+        let mut compname = std::ptr::null();
+        let rc = unsafe { ffi::blosc2_compcode_to_compname(self as _, &mut compname) };
+        if rc == -1 {
+            return Err(format!("Unsupported Codec {:?}", self).into());
+        }
+        unsafe {
+            CString::from_raw(compname as _)
+                .into_string()
+                .map_err(|e| e.to_string().into())
+        }
+    }
+}
+impl<'a> TryFrom<&'a str> for Codec {
+    type Error = Box<dyn std::error::Error>;
+
+    fn try_from(value: &'a str) -> Result<Self> {
+        let compname = CString::new(value)?;
+        let compcode = unsafe { ffi::blosc2_compname_to_compcode(compname.as_ptr()) };
+        if compcode == -1 {
+            return Err(format!("Compcode {} not recognized", value).into());
+        }
+        Codec::try_from(compcode)
+    }
+}
+impl TryFrom<i32> for Codec {
+    type Error = Box<dyn std::error::Error>;
+
+    fn try_from(compcode: i32) -> Result<Self> {
+        match compcode as u32 {
+            ffi::BLOSC_BLOSCLZ => Ok(Codec::BloscLz),
+            ffi::BLOSC_LZ4 => Ok(Codec::LZ4),
+            ffi::BLOSC_LZ4HC => Ok(Codec::LZ4HC),
+            ffi::BLOSC_ZLIB => Ok(Codec::ZLIB),
+            ffi::BLOSC_ZSTD => Ok(Codec::ZSTD),
+            ffi::BLOSC_LAST_CODEC => Ok(Codec::LastCodec),
+            ffi::BLOSC_LAST_REGISTERED_CODEC => Ok(Codec::LastRegisteredCodec),
+            _ => Err(format!("Not match for compcode {}", compcode).into()),
+        }
+    }
+}
+
 impl Default for Codec {
     fn default() -> Self {
         Codec::BloscLz

@@ -138,6 +138,7 @@ pub mod schunk {
 
     impl Storage {
         /// Set url/file path to specify a file-backed `schunk`.
+        /// if not set, defaults to an in-memory `schunk`
         pub fn set_urlpath<S: AsRef<Path>>(mut self, urlpath: S) -> Result<Self> {
             self.0.urlpath =
                 CString::new(urlpath.as_ref().to_string_lossy().to_string())?.into_raw();

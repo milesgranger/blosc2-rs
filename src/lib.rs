@@ -636,9 +636,9 @@ pub mod read {
             self.buf_end = compress_into(
                 &mut self.src[self.src_pos..self.src_pos + self.src_end],
                 &mut self.buf,
-                CLevel::default() as _,
-                Filter::default() as _,
-                Codec::default() as _,
+                None,
+                None,
+                None,
             )?;
             self.buf_pos = 0;
             Ok(())
@@ -909,12 +909,8 @@ pub fn compress<T: Clone>(
     if src.is_empty() {
         return Ok(vec![]);
     }
-    let cdc = codec.unwrap_or_default();
-    let clvl = clevel.unwrap_or_default();
-    let fltr = filter.unwrap_or_default();
-
     let mut dst = vec![src[0].clone(); max_compress_len(src)];
-    let n_bytes = compress_into(src, &mut dst, clvl, fltr, cdc)?;
+    let n_bytes = compress_into(src, &mut dst, clevel, filter, codec)?;
 
     dst.truncate(n_bytes);
     Ok(dst)
@@ -924,19 +920,19 @@ pub fn compress<T: Clone>(
 pub fn compress_into<T>(
     src: &[T],
     dst: &mut [T],
-    clevel: CLevel,
-    filter: Filter,
-    codec: Codec,
+    clevel: Option<CLevel>,
+    filter: Option<Filter>,
+    codec: Option<Codec>,
 ) -> Result<usize> {
     if src.is_empty() {
         return Ok(0);
     }
     let typesize = std::mem::size_of::<T>();
-    set_compressor(codec)?;
+    set_compressor(codec.unwrap_or_default())?;
     let n_bytes = unsafe {
         ffi::blosc2_compress(
-            clevel as _,
-            filter as _,
+            clevel.unwrap_or_default() as _,
+            filter.unwrap_or_default() as _,
             typesize as _,
             src.as_ptr() as *const c_void,
             src.len() as _,
@@ -968,7 +964,7 @@ pub fn decompress_ctx<T: Clone>(src: &[T], ctx: &mut Context) -> Result<Vec<T>> 
 }
 
 #[inline]
-pub fn decompress_into_ctx<T: Clone>(src: &[T], dst: &mut [T], ctx: &mut Context) -> Result<usize> {
+pub fn decompress_into_ctx<T>(src: &[T], dst: &mut [T], ctx: &mut Context) -> Result<usize> {
     if src.is_empty() {
         return Ok(0);
     }
@@ -988,7 +984,7 @@ pub fn decompress_into_ctx<T: Clone>(src: &[T], dst: &mut [T], ctx: &mut Context
 }
 
 #[inline]
-pub fn decompress<T: Clone>(src: &[T]) -> Result<Vec<T>> {
+pub fn decompress<T>(src: &[T]) -> Result<Vec<T>> {
     if src.is_empty() {
         return Ok(vec![]);
     }
@@ -1044,6 +1040,9 @@ pub fn set_compressor(codec: Codec) -> Result<()> {
 pub fn set_nthreads(nthreads: usize) -> usize {
     let n = unsafe { ffi::blosc2_set_nthreads(nthreads as _) };
     n as _
+}
+pub fn get_nthreads() -> usize {
+    unsafe { ffi::blosc2_get_nthreads() as _ }
 }
 
 /// Get the version for a given Codec.
@@ -1293,13 +1292,7 @@ mod tests {
     fn test_basic_roundtrip_into() -> Result<()> {
         let input = b"some data";
         let mut compressed = vec![0u8; 100];
-        let n_bytes = compress_into(
-            input,
-            &mut compressed,
-            CLevel::default() as _,
-            Filter::default() as _,
-            Codec::default() as _,
-        )?;
+        let n_bytes = compress_into(input, &mut compressed, None, None, None)?;
 
         let mut decompressed = vec![0u8; input.len()];
         let n_out = decompress_into(&compressed[..n_bytes], &mut decompressed)?;

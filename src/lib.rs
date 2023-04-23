@@ -800,7 +800,7 @@ pub mod read {
 /// use blosc2::CParams;
 /// let values = vec![0, 1, 2, 3];
 /// let cparams = CParams::from(&values[0])
-///     .set_threads(2);  // Optionally adjust default values
+///     .set_nthreads(2);  // Optionally adjust default values
 /// ```
 /// [blosc2_cparams]: blosc2_sys::blosc2_cparams
 pub struct CParams(ffi::blosc2_cparams);
@@ -835,7 +835,7 @@ impl CParams {
         self
     }
     /// Set number of threads, defaults to 1
-    pub fn set_threads(mut self, n: usize) -> Self {
+    pub fn set_nthreads(mut self, n: usize) -> Self {
         self.0.nthreads = n as _;
         self
     }
@@ -843,6 +843,9 @@ impl CParams {
     pub fn set_typesize<T>(mut self) -> Self {
         self.0.typesize = std::mem::size_of::<T>() as _;
         self
+    }
+    pub fn get_typesize(&self) -> usize {
+        self.0.typesize as _
     }
 }
 
@@ -906,6 +909,30 @@ impl Default for DParams {
 /// [blosc2_context]: blosc2_sys::blosc2_context
 #[derive(Clone)]
 pub struct Context(pub(crate) *mut ffi::blosc2_context);
+
+impl Context {
+    /// Get the CParams from this context
+    ///
+    /// Example
+    /// -------
+    /// ```
+    /// use blosc2::{Context, CParams};
+    ///
+    /// let ctx = Context::from(CParams::default().set_typesize::<i64>());
+    /// assert_eq!(ctx.get_cparams().unwrap().get_typesize(), 8);
+    /// ```
+    pub fn get_cparams(&self) -> Result<CParams> {
+        if self.0.is_null() {
+            return Err("Context pointer is null".into());
+        }
+        let mut cparams = CParams::default();
+        let rc = unsafe { ffi::blosc2_ctx_get_cparams(self.0, &mut cparams.0) };
+        if rc < 0 {
+            return Err(Blosc2Error::from(rc).into());
+        }
+        Ok(cparams)
+    }
+}
 
 impl From<DParams> for Context {
     fn from(dparams: DParams) -> Self {

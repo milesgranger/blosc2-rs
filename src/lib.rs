@@ -239,9 +239,9 @@ pub mod schunk {
             let nbytes = unsafe {
                 ffi::blosc2_chunk_uninit(
                     cparams.0,
-                    len as _,
+                    len as i32 * cparams.0.typesize,
                     dst.as_mut_ptr() as *mut c_void,
-                    dst.capacity() as _,
+                    dst.capacity() as i32 * cparams.0.typesize, // size in bytes
                 )
             };
             if nbytes < 0 {
@@ -265,27 +265,50 @@ pub mod schunk {
         /// assert_eq!(chunk.info().unwrap().nbytes(), 10);
         /// ```
         pub fn zeros<T>(cparams: CParams, len: usize) -> Result<Self> {
-            let mut dst: Vec<T> =
-                Vec::with_capacity(len + ffi::BLOSC_EXTENDED_HEADER_LENGTH as usize);
             if std::mem::size_of::<T>() != cparams.0.typesize as usize {
                 return Err("typesize mismatch between CParams and T".into());
             }
+            let mut dst: Vec<T> = Vec::with_capacity(
+                (len * cparams.0.typesize as usize) + ffi::BLOSC_EXTENDED_HEADER_LENGTH as usize,
+            );
 
             let nbytes = unsafe {
                 ffi::blosc2_chunk_zeros(
                     cparams.0,
-                    len as _,
+                    len as i32 * cparams.0.typesize,
                     dst.as_mut_ptr() as _,
-                    dst.capacity() as _,
+                    dst.capacity() as i32, // size in bytes
                 )
             };
+            dbg!(nbytes);
             if nbytes < 0 {
                 return Err(Box::new(Blosc2Error::from(nbytes)));
             }
-            unsafe { dst.set_len(nbytes as _) };
+            unsafe { dst.set_len(nbytes as usize) };
             let ptr = dst.as_mut_ptr();
             std::mem::forget(dst);
             Ok(Self::new(ptr as _, true))
+        }
+
+        /// Decompress the current chunk
+        ///
+        /// Example
+        /// -------
+        /// ```
+        /// use blosc2::CParams;
+        /// use blosc2::schunk::Chunk;
+        ///
+        /// let cparams = CParams::default().set_typesize::<i64>();
+        /// let mut chunk = Chunk::zeros::<i64>(cparams, 5).unwrap();
+        ///
+        /// assert_eq!(chunk.info().unwrap().nbytes(), 40);  // 5 elements * 64bit == 40bytes
+        /// let decompressed = chunk.decompress::<i64>().unwrap();
+        /// dbg!(decompressed.len());
+        /// assert_eq!(decompressed, vec![0i64; 5]);
+        /// ```
+        pub fn decompress<T>(&mut self) -> Result<Vec<T>> {
+            let slice = unsafe { std::slice::from_raw_parts(self.chunk, self.info()?.cbytes) };
+            crate::decompress(slice)
         }
 
         /// Create a new `Chunk` from a `SChunk`
@@ -816,6 +839,11 @@ impl CParams {
         self.0.nthreads = n as _;
         self
     }
+    /// Set the type size
+    pub fn set_typesize<T>(mut self) -> Self {
+        self.0.typesize = std::mem::size_of::<T>() as _;
+        self
+    }
 }
 
 impl Default for CParams {
@@ -1084,17 +1112,21 @@ pub fn decompress_into_ctx<T>(src: &[T], dst: &mut [T], ctx: &mut Context) -> Re
 }
 
 #[inline]
-pub fn decompress<T>(src: &[T]) -> Result<Vec<T>> {
+pub fn decompress<T>(src: &[u8]) -> Result<Vec<T>> {
     if src.is_empty() {
         return Ok(vec![]);
     }
+
+    // blosc2 plays by bytes, we'll go by however many bytes per element
+    // to set the vec length in actual elements
     let info = CompressedBufferInfo::try_from(src)?;
-    let mut dst = Vec::with_capacity(info.nbytes);
+    let n_elements = info.nbytes as usize / std::mem::size_of::<T>();
+    let mut dst = Vec::with_capacity(n_elements);
 
     let n_bytes = unsafe {
         ffi::blosc2_decompress(
             src.as_ptr() as *const c_void,
-            src.len() as _,
+            src.len() as i32,
             dst.as_mut_ptr() as *mut c_void,
             info.nbytes as _,
         )
@@ -1103,12 +1135,15 @@ pub fn decompress<T>(src: &[T]) -> Result<Vec<T>> {
     if n_bytes < 0 {
         return Err(Blosc2Error::from(n_bytes).into());
     }
-    unsafe { dst.set_len(n_bytes as _) };
+
+    debug_assert_eq!(n_bytes as usize, info.nbytes);
+    unsafe { dst.set_len(n_elements) };
+
     Ok(dst)
 }
 
 #[inline]
-pub fn decompress_into<T>(src: &[T], dst: &mut [T]) -> Result<usize> {
+pub fn decompress_into<T>(src: &[u8], dst: &mut [T]) -> Result<usize> {
     let n_bytes = unsafe {
         ffi::blosc2_decompress(
             src.as_ptr() as *const c_void,

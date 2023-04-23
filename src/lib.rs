@@ -1144,17 +1144,20 @@ pub fn decompress<T>(src: &[u8]) -> Result<Vec<T>> {
 
 #[inline]
 pub fn decompress_into<T>(src: &[u8], dst: &mut [T]) -> Result<usize> {
+    let info = CompressedBufferInfo::try_from(src)?;
     let n_bytes = unsafe {
         ffi::blosc2_decompress(
             src.as_ptr() as *const c_void,
-            src.len() as _,
+            src.len() as i32,
             dst.as_mut_ptr() as *mut c_void,
-            dst.len() as _,
+            info.nbytes as _,
         )
     };
+
     if n_bytes < 0 {
         return Err(Blosc2Error::from(n_bytes).into());
     }
+    debug_assert_eq!(n_bytes as usize, info.nbytes);
     Ok(n_bytes as _)
 }
 

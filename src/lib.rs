@@ -880,7 +880,7 @@ impl<T> From<&T> for CParams {
 /// ```
 /// use blosc2::DParams;
 /// let dparams = DParams::default()
-///     .set_threads(2);  // Optionally adjust default values
+///     .set_nthreads(2);  // Optionally adjust default values
 /// ```
 ///
 /// [blosc2_dparams]: blosc2_sys::blosc2_dparams
@@ -888,9 +888,12 @@ pub struct DParams(pub(crate) ffi::blosc2_dparams);
 
 impl DParams {
     /// Set number of theads for decompression, defaults to 1
-    pub fn set_threads(mut self, n: usize) -> Self {
+    pub fn set_nthreads(mut self, n: usize) -> Self {
         self.0.nthreads = n as _;
         self
+    }
+    pub fn get_nthreads(&self) -> usize {
+        self.0.nthreads as _
     }
 }
 
@@ -931,6 +934,27 @@ impl Context {
             return Err(Blosc2Error::from(rc).into());
         }
         Ok(cparams)
+    }
+    /// Get the DParams from this context
+    ///
+    /// Example
+    /// -------
+    /// ```
+    /// use blosc2::{Context, DParams};
+    ///
+    /// let ctx = Context::from(DParams::default().set_nthreads(12));
+    /// assert_eq!(ctx.get_dparams().unwrap().get_nthreads(), 12);
+    /// ```
+    pub fn get_dparams(&self) -> Result<DParams> {
+        if self.0.is_null() {
+            return Err("Context pointer is null".into());
+        }
+        let mut dparams = DParams::default();
+        let rc = unsafe { ffi::blosc2_ctx_get_dparams(self.0, &mut dparams.0) };
+        if rc < 0 {
+            return Err(Blosc2Error::from(rc).into());
+        }
+        Ok(dparams)
     }
 }
 

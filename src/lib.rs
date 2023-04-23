@@ -1024,7 +1024,7 @@ pub fn compress_into_ctx<T>(src: &[T], dst: &mut [u8], ctx: &mut Context) -> Res
 /// Return the max size a compressed buffer needs to be to hold `src`
 #[inline(always)]
 pub fn max_compress_len<T>(src: &[T]) -> usize {
-    src.len() + ffi::BLOSC2_MAX_OVERHEAD as usize
+    (src.len() * std::mem::size_of::<T>()) + ffi::BLOSC2_MAX_OVERHEAD as usize
 }
 
 #[inline]

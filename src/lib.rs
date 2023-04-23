@@ -1078,16 +1078,29 @@ pub fn compress_into<T>(
 }
 
 #[inline]
-pub fn decompress_ctx<T: Clone>(src: &[T], ctx: &mut Context) -> Result<Vec<T>> {
+pub fn decompress_ctx<T>(src: &[u8], ctx: &mut Context) -> Result<Vec<T>> {
     if src.is_empty() {
         return Ok(vec![]);
     }
     let info = CompressedBufferInfo::try_from(src)?;
-    let mut dst = vec![src[0].clone(); info.nbytes];
-    let n_bytes = decompress_into_ctx(src, &mut dst, ctx)?;
-    if dst.len() > n_bytes as _ {
-        dst.truncate(n_bytes as _);
+    let n_elements = info.nbytes as usize / std::mem::size_of::<T>();
+    let mut dst = Vec::with_capacity(n_elements);
+
+    let n_bytes = unsafe {
+        ffi::blosc2_decompress_ctx(
+            ctx.0,
+            src.as_ptr() as *const c_void,
+            src.len() as i32,
+            dst.as_mut_ptr() as *mut c_void,
+            info.nbytes as _,
+        )
+    };
+
+    if n_bytes < 0 {
+        return Err(Blosc2Error::from(n_bytes).into());
     }
+    debug_assert_eq!(n_bytes as usize, info.nbytes);
+    unsafe { dst.set_len(n_elements) };
     Ok(dst)
 }
 
@@ -1096,18 +1109,21 @@ pub fn decompress_into_ctx<T>(src: &[T], dst: &mut [T], ctx: &mut Context) -> Re
     if src.is_empty() {
         return Ok(0);
     }
+    let info = CompressedBufferInfo::try_from(src)?;
     let n_bytes = unsafe {
         ffi::blosc2_decompress_ctx(
             ctx.0,
-            src.as_ptr() as _,
-            src.len() as _,
-            dst.as_mut_ptr() as _,
-            dst.len() as _,
+            src.as_ptr() as *const c_void,
+            src.len() as i32,
+            dst.as_mut_ptr() as *mut c_void,
+            info.nbytes as _,
         )
     };
+
     if n_bytes < 0 {
         return Err(Blosc2Error::from(n_bytes).into());
     }
+    debug_assert_eq!(n_bytes as usize, info.nbytes);
     Ok(n_bytes as _)
 }
 

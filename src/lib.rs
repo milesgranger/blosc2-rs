@@ -986,11 +986,11 @@ impl<T> TryFrom<&[T]> for CompressedBufferInfo {
 /// Context interface to compression, does not require call to init/destroy. For
 /// use in multithreaded applications
 #[inline]
-pub fn compress_ctx<T: Clone>(src: &[T], ctx: &mut Context) -> Result<Vec<T>> {
+pub fn compress_ctx<T>(src: &[T], ctx: &mut Context) -> Result<Vec<u8>> {
     if src.is_empty() {
         return Ok(vec![]);
     }
-    let mut dst = vec![src[0].clone(); max_compress_len(src)];
+    let mut dst = vec![0u8; max_compress_len(src)];
     let size = compress_into_ctx(src, &mut dst, ctx)?;
     if dst.len() > size {
         dst.truncate(size as _);
@@ -999,7 +999,7 @@ pub fn compress_ctx<T: Clone>(src: &[T], ctx: &mut Context) -> Result<Vec<T>> {
 }
 
 #[inline]
-pub fn compress_into_ctx<T: Clone>(src: &[T], dst: &mut [T], ctx: &mut Context) -> Result<usize> {
+pub fn compress_into_ctx<T>(src: &[T], dst: &mut [u8], ctx: &mut Context) -> Result<usize> {
     if src.is_empty() {
         return Ok(0);
     }
@@ -1028,16 +1028,16 @@ pub fn max_compress_len<T>(src: &[T]) -> usize {
 }
 
 #[inline]
-pub fn compress<T: Clone>(
+pub fn compress<T>(
     src: &[T],
     clevel: Option<CLevel>,
     filter: Option<Filter>,
     codec: Option<Codec>,
-) -> Result<Vec<T>> {
+) -> Result<Vec<u8>> {
     if src.is_empty() {
         return Ok(vec![]);
     }
-    let mut dst = vec![src[0].clone(); max_compress_len(src)];
+    let mut dst = vec![0u8; max_compress_len(src)];
     let n_bytes = compress_into(src, &mut dst, clevel, filter, codec)?;
 
     dst.truncate(n_bytes);
@@ -1047,7 +1047,7 @@ pub fn compress<T: Clone>(
 #[inline]
 pub fn compress_into<T>(
     src: &[T],
-    dst: &mut [T],
+    dst: &mut [u8],
     clevel: Option<CLevel>,
     filter: Option<Filter>,
     codec: Option<Codec>,

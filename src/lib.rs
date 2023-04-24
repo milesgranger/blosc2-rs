@@ -231,11 +231,12 @@ pub mod schunk {
         /// assert_eq!(chunk.info().unwrap().nbytes(), 10);
         /// ```
         pub fn uninit<T>(cparams: CParams, len: usize) -> Result<Self> {
-            let mut dst: Vec<T> =
-                Vec::with_capacity(len + ffi::BLOSC_EXTENDED_HEADER_LENGTH as usize);
             if std::mem::size_of::<T>() != cparams.0.typesize as usize {
                 return Err("typesize mismatch between CParams and T".into());
             }
+            let mut dst = Vec::with_capacity(
+                (len * cparams.0.typesize as usize) + ffi::BLOSC_EXTENDED_HEADER_LENGTH as usize,
+            );
             let nbytes = unsafe {
                 ffi::blosc2_chunk_uninit(
                     cparams.0,
@@ -277,10 +278,9 @@ pub mod schunk {
                     cparams.0,
                     len as i32 * cparams.0.typesize,
                     dst.as_mut_ptr() as _,
-                    dst.capacity() as i32, // size in bytes
+                    dst.capacity() as i32,
                 )
             };
-            dbg!(nbytes);
             if nbytes < 0 {
                 return Err(Box::new(Blosc2Error::from(nbytes)));
             }
@@ -838,6 +838,10 @@ impl CParams {
     pub fn set_nthreads(mut self, n: usize) -> Self {
         self.0.nthreads = n as _;
         self
+    }
+    /// Get number of threads
+    pub fn get_nthreads(&self) -> usize {
+        self.0.nthreads as _
     }
     /// Set the type size
     pub fn set_typesize<T>(mut self) -> Self {

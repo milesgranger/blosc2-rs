@@ -225,6 +225,8 @@ pub mod schunk {
             Self { chunk, needs_free }
         }
 
+        /// Construct Chunk from vector of bytes, this Vec is assumed to be the result of a valid
+        /// chunk de/compression or other initialization method like uinit/zeros etc.
         pub fn from_vec(v: Vec<u8>) -> Self {
             let mut v = v;
             let ptr = v.as_mut_ptr();

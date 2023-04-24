@@ -819,182 +819,6 @@ pub mod schunk {
     }
 }
 
-pub mod read {
-    //! NOTE: These De/compressors are different from the blosc2 schunk. There are no frames, meta
-    //! layers, etc. It's _only_ meant for one or more independently compressed blocks. No more, no
-    //! less. If you're wanting `schunk` then hop over to the [schunk] module.
-    //!
-    //! [schunk]: crate::schunk
-    use super::*;
-
-    pub struct Decompressor<R: std::io::Read> {
-        rdr: R,
-        src: [u8; BUFSIZE],
-        src_pos: usize,
-        src_end: usize,
-        buf: [u8; BUFSIZE],
-        buf_pos: usize,
-        buf_end: usize,
-    }
-
-    impl<R: std::io::Read> Decompressor<R> {
-        /// Blosc2 streaming decompressor. Will take care of any reader which
-        /// contains one or more blocks of blosc2 encoded/compressed data.
-        pub fn new(rdr: R) -> Decompressor<R> {
-            Self {
-                rdr,
-                buf: [0u8; BUFSIZE], // Compressed data waiting to be copied to caller
-                buf_pos: 0,
-                buf_end: 0,
-                src: [0u8; BUFSIZE], // Data from reader waiting to be compressed
-                src_pos: 0,
-                src_end: 0,
-            }
-        }
-        pub fn into_inner(self) -> R {
-            self.rdr
-        }
-        pub fn get_ref(&self) -> &R {
-            &self.rdr
-        }
-        pub fn get_ref_mut(&mut self) -> &mut R {
-            &mut self.rdr
-        }
-        fn read_from_buf(&mut self, buf: &mut [u8]) -> usize {
-            let available_bytes = self.buf_end - self.buf_pos;
-            let count = std::cmp::min(available_bytes, buf.len());
-            buf[..count].copy_from_slice(&self.buf[self.buf_pos..self.buf_pos + count]);
-            self.buf_pos += count;
-            count
-        }
-        fn refill_src(&mut self) -> Result<usize> {
-            // Previous decompress didn't decompress to end,
-            // meaning there was a block end in the stream.
-            // so we need to scoot the remainder to the front and
-            // then continue to read onto the end of that chunk
-            if self.src_pos > 0 {
-                self.src.rotate_left(self.src_pos);
-                self.src_end = self.src_end - self.src_pos;
-                self.src_pos = 0;
-            }
-            let n_bytes = self
-                .rdr
-                .read(&mut self.src[self.src_end..])
-                .map_err(|e| Error::Other(e.to_string()))?;
-            self.src_end += n_bytes;
-            Ok(n_bytes)
-        }
-        fn decompress_src_into_buf(&mut self) -> Result<()> {
-            // TODO: Can probably decompress directly into caller's buffer if it's big enough
-            self.refill_src()?;
-            if self.src_pos == self.src_end {
-                return Ok(()); // Reader is empty and nothing left to decompress
-            }
-            let info = CompressedBufferInfo::try_from(&self.src[self.src_pos..self.src_end])
-                .map_err(|e| Error::Other(e.to_string()))?;
-            self.buf_end = decompress_into(&self.src[self.src_pos..self.src_end], &mut self.buf)?;
-            self.buf_pos = 0;
-            self.src_pos = info.cbytes; // decompression ran up to cbytes (compressed bytes read from src buffer)
-            Ok(())
-        }
-    }
-    impl<R: std::io::Read> std::io::Read for Decompressor<R> {
-        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            let count = self.read_from_buf(buf);
-            if count > 0 {
-                Ok(count)
-            } else {
-                self.decompress_src_into_buf()
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-                Ok(self.read_from_buf(buf))
-            }
-        }
-    }
-
-    /// Blosc2 streaming compressor. Will basically pack together blocks of
-    /// compressed data at max ``BUFSIZE`` from source data.
-    /// To decode it, one must use the `Decompressor` or make their own repeated calls
-    /// to decompression functions. This is because a single call to a buffer with multiple
-    /// compressed blocks will only decompress the first block.
-    pub struct Compressor<R: std::io::Read> {
-        rdr: R,
-        src: [u8; BUFSIZE],
-        src_pos: usize,
-        src_end: usize,
-        buf: [u8; BUFSIZE], // 64mb internal buffer
-        buf_pos: usize,
-        buf_end: usize,
-    }
-
-    impl<R: std::io::Read> Compressor<R> {
-        pub fn new(rdr: R) -> Compressor<R> {
-            Self {
-                rdr,
-                buf: [0u8; BUFSIZE], // Compressed data waiting to be copied to caller
-                buf_pos: 0,
-                buf_end: 0,
-                src: [0u8; BUFSIZE], // Data from reader waiting to be compressed
-                src_pos: 0,
-                src_end: 0,
-            }
-        }
-        pub fn into_inner(self) -> R {
-            self.rdr
-        }
-        pub fn get_ref(&self) -> &R {
-            &self.rdr
-        }
-        pub fn get_ref_mut(&mut self) -> &mut R {
-            &mut self.rdr
-        }
-        fn read_from_buf(&mut self, buf: &mut [u8]) -> usize {
-            let available_bytes = self.buf_end - self.buf_pos;
-            let count = std::cmp::min(available_bytes, buf.len());
-            buf[..count].copy_from_slice(&self.buf[self.buf_pos..self.buf_pos + count]);
-            self.buf_pos += count;
-            count
-        }
-        fn refill_src(&mut self) -> Result<usize> {
-            self.src_end = self
-                .rdr
-                .read(&mut self.src)
-                .map_err(|e| Error::Other(e.to_string()))?;
-            self.src_pos = 0;
-            Ok(self.src_end)
-        }
-        fn compress_src_into_buf(&mut self) -> Result<()> {
-            self.buf_end = compress_into(
-                &mut self.src[self.src_pos..self.src_pos + self.src_end],
-                &mut self.buf,
-                None,
-                None,
-                None,
-            )?;
-            self.buf_pos = 0;
-            Ok(())
-        }
-    }
-
-    impl<R: std::io::Read> std::io::Read for Compressor<R> {
-        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            let count = self.read_from_buf(buf);
-            if count > 0 {
-                Ok(count)
-            } else {
-                let n_read = self
-                    .refill_src()
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-                if n_read == 0 {
-                    return Ok(0);
-                }
-                self.compress_src_into_buf()
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-                Ok(self.read_from_buf(buf))
-            }
-        }
-    }
-}
-
 /// Wrapper to [blosc2_cparams].  
 /// Compression parameters.
 ///
@@ -1510,7 +1334,7 @@ pub fn destroy() {
 #[cfg(test)]
 mod tests {
     use ctor::{ctor, dtor};
-    use std::io::{Cursor, Read};
+    use std::io::Cursor;
 
     use super::*;
 
@@ -1595,63 +1419,6 @@ mod tests {
     }
 
     #[test]
-    fn test_basic_compressor() -> Result<()> {
-        let input = b"some data";
-        let cursor = Cursor::new(input);
-
-        let mut compressed: Vec<u8> = vec![];
-        let mut compressor = read::Compressor::new(cursor);
-        compressor.read_to_end(&mut compressed).unwrap();
-
-        let mut decompressed = vec![0u8; input.len()];
-        decompress_into(&mut compressed, &mut decompressed)?;
-
-        assert_eq!(input, decompressed.as_slice());
-        Ok(())
-    }
-
-    #[test]
-    fn test_basic_decompressor() -> Result<()> {
-        let mut stream = vec![];
-        stream.extend_from_slice(compress(b"foo", None, None, None)?.as_slice());
-        stream.extend_from_slice(compress(b"bar", None, None, None)?.as_slice());
-
-        let mut decompressor = read::Decompressor::new(Cursor::new(stream));
-        let mut decompressed = vec![];
-        decompressor
-            .read_to_end(&mut decompressed)
-            .map_err(|e| Error::Other(e.to_string()))?;
-
-        assert_eq!(b"foobar", decompressed.as_slice());
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_basic_large_stream() -> Result<()> {
-        // stream that's well beyond BUFSIZE
-        let stream = std::iter::repeat(b"foobar")
-            .take(BUFSIZE * 2)
-            .flat_map(|s| s.to_vec())
-            .collect::<Vec<u8>>();
-
-        let mut compressed = vec![];
-        let mut compressor = read::Compressor::new(Cursor::new(stream.clone()));
-        let n_compressed = std::io::copy(&mut compressor, &mut compressed)
-            .map_err(|e| Error::Other(e.to_string()))?;
-        assert_eq!(n_compressed, 1020);
-
-        let mut decompressed = vec![];
-        let mut decompressor = read::Decompressor::new(Cursor::new(compressed));
-        let n_decompressed = std::io::copy(&mut decompressor, &mut decompressed)
-            .map_err(|e| Error::Other(e.to_string()))?;
-        assert_eq!(n_decompressed as usize, stream.len());
-
-        assert_eq!(&decompressed, &stream);
-        Ok(())
-    }
-
-    #[test]
     fn test_schunk_basic() -> Result<()> {
         let input = b"some data";
         let storage = schunk::Storage::default()
@@ -1700,7 +1467,7 @@ mod tests {
             .map_err(|e| Error::Other(e.to_string()))?;
         assert_eq!(nbytes as usize, input.len());
 
-        let ratio = schunk.compression_ratio(); // ~36.
+        let ratio = schunk.compression_ratio();
         assert!(84. < ratio);
         assert!(86. > ratio);
 

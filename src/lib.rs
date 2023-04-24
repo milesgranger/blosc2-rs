@@ -5,7 +5,161 @@ use std::ffi::{c_void, CStr, CString};
 use std::mem;
 
 /// Result type used in this library
-pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug)]
+pub enum Error {
+    /// A Blosc2 library specific error. Often mapped to the
+    /// raw error return code
+    Blosc2(Blosc2Error),
+    /// Any other error, converted into a string
+    Other(String),
+}
+impl From<Blosc2Error> for Error {
+    fn from(err: Blosc2Error) -> Self {
+        Error::Blosc2(err)
+    }
+}
+impl From<String> for Error {
+    fn from(err: String) -> Self {
+        Error::Other(err)
+    }
+}
+impl<'a> From<&'a str> for Error {
+    fn from(err: &'a str) -> Self {
+        Error::Other(err.to_string())
+    }
+}
+
+impl std::error::Error for Error {}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+/// Possible errors arising from Blosc2 library
+#[derive(Debug)]
+#[repr(i32)]
+pub enum Blosc2Error {
+    /// Generic failure
+    Failure = ffi::BLOSC2_ERROR_FAILURE,
+    /// Bad stream
+    Stream = ffi::BLOSC2_ERROR_STREAM,
+    /// Invalid data
+    Data = ffi::BLOSC2_ERROR_DATA,
+    /// Memory alloc/realloc failure
+    MemoryAlloc = ffi::BLOSC2_ERROR_MEMORY_ALLOC,
+    /// Not enough space to read
+    ReadBuffer = ffi::BLOSC2_ERROR_READ_BUFFER,
+    /// Not enough space to write
+    WriteBuffer = ffi::BLOSC2_ERROR_WRITE_BUFFER,
+    /// Codec not supported
+    CodecSupport = ffi::BLOSC2_ERROR_CODEC_SUPPORT,
+    /// Invalid parameter supplied to codec
+    CodecParam = ffi::BLOSC2_ERROR_CODEC_PARAM,
+    /// Codec dictionary error
+    CodecDict = ffi::BLOSC2_ERROR_CODEC_DICT,
+    /// Version not supported
+    VersionSupport = ffi::BLOSC2_ERROR_VERSION_SUPPORT,
+    /// Invalid value in header
+    InvalidHeader = ffi::BLOSC2_ERROR_INVALID_HEADER,
+    /// Invalid parameter supplied to function
+    InvalidParam = ffi::BLOSC2_ERROR_INVALID_PARAM,
+    /// File read failure
+    FileRead = ffi::BLOSC2_ERROR_FILE_READ,
+    /// File write failure
+    FileWrite = ffi::BLOSC2_ERROR_FILE_WRITE,
+    /// File open failure
+    FileOpen = ffi::BLOSC2_ERROR_FILE_OPEN,
+    /// Not found
+    NotFound = ffi::BLOSC2_ERROR_NOT_FOUND,
+    /// Bad run length encoding
+    RunLength = ffi::BLOSC2_ERROR_RUN_LENGTH,
+    /// Filter pipeline error
+    FilterPipeline = ffi::BLOSC2_ERROR_FILTER_PIPELINE,
+    /// Chunk insert failure
+    ChunkInsert = ffi::BLOSC2_ERROR_CHUNK_INSERT,
+    /// Chunk append failure
+    ChunkAppend = ffi::BLOSC2_ERROR_CHUNK_APPEND,
+    /// Chunk update failure
+    ChunkUpdate = ffi::BLOSC2_ERROR_CHUNK_UPDATE,
+    /// Sizes larger than 2gb not supported
+    TwoGBLimit = ffi::BLOSC2_ERROR_2GB_LIMIT,
+    /// Super-chunk copy failure
+    SchunkCopy = ffi::BLOSC2_ERROR_SCHUNK_COPY,
+    /// Wrong type for frame
+    FrameType = ffi::BLOSC2_ERROR_FRAME_TYPE,
+    /// File truncate failure
+    FileTruncate = ffi::BLOSC2_ERROR_FILE_TRUNCATE,
+    /// Thread or thread context creation failure
+    ThreadCreate = ffi::BLOSC2_ERROR_THREAD_CREATE,
+    /// Postfilter failure
+    PostFilter = ffi::BLOSC2_ERROR_POSTFILTER,
+    /// Special frame failure
+    FrameSpecial = ffi::BLOSC2_ERROR_FRAME_SPECIAL,
+    /// Special super-chunk failure
+    SchunkSpecial = ffi::BLOSC2_ERROR_SCHUNK_SPECIAL,
+    /// IO plugin error
+    PluginIO = ffi::BLOSC2_ERROR_PLUGIN_IO,
+    /// Remove file failure
+    FileRemove = ffi::BLOSC2_ERROR_FILE_REMOVE,
+    /// Pointer is null
+    NullPointer = ffi::BLOSC2_ERROR_NULL_POINTER,
+    /// Invalid index
+    InvalidIndex = ffi::BLOSC2_ERROR_INVALID_INDEX,
+    /// Metalayer has not been found
+    MetalayerNotFound = ffi::BLOSC2_ERROR_METALAYER_NOT_FOUND,
+}
+
+impl std::fmt::Display for Blosc2Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl From<i32> for Blosc2Error {
+    fn from(code: i32) -> Self {
+        match code {
+            ffi::BLOSC2_ERROR_FAILURE => Blosc2Error::Failure,
+            ffi::BLOSC2_ERROR_STREAM => Blosc2Error::Stream,
+            ffi::BLOSC2_ERROR_DATA => Blosc2Error::Data,
+            ffi::BLOSC2_ERROR_MEMORY_ALLOC => Blosc2Error::MemoryAlloc,
+            ffi::BLOSC2_ERROR_READ_BUFFER => Blosc2Error::ReadBuffer,
+            ffi::BLOSC2_ERROR_WRITE_BUFFER => Blosc2Error::WriteBuffer,
+            ffi::BLOSC2_ERROR_CODEC_SUPPORT => Blosc2Error::CodecSupport,
+            ffi::BLOSC2_ERROR_CODEC_PARAM => Blosc2Error::CodecParam,
+            ffi::BLOSC2_ERROR_CODEC_DICT => Blosc2Error::CodecDict,
+            ffi::BLOSC2_ERROR_VERSION_SUPPORT => Blosc2Error::VersionSupport,
+            ffi::BLOSC2_ERROR_INVALID_HEADER => Blosc2Error::InvalidHeader,
+            ffi::BLOSC2_ERROR_INVALID_PARAM => Blosc2Error::InvalidParam,
+            ffi::BLOSC2_ERROR_FILE_READ => Blosc2Error::FileRead,
+            ffi::BLOSC2_ERROR_FILE_WRITE => Blosc2Error::FileWrite,
+            ffi::BLOSC2_ERROR_FILE_OPEN => Blosc2Error::FileOpen,
+            ffi::BLOSC2_ERROR_NOT_FOUND => Blosc2Error::NotFound,
+            ffi::BLOSC2_ERROR_RUN_LENGTH => Blosc2Error::RunLength,
+            ffi::BLOSC2_ERROR_FILTER_PIPELINE => Blosc2Error::FilterPipeline,
+            ffi::BLOSC2_ERROR_CHUNK_INSERT => Blosc2Error::ChunkInsert,
+            ffi::BLOSC2_ERROR_CHUNK_APPEND => Blosc2Error::ChunkAppend,
+            ffi::BLOSC2_ERROR_CHUNK_UPDATE => Blosc2Error::ChunkUpdate,
+            ffi::BLOSC2_ERROR_2GB_LIMIT => Blosc2Error::TwoGBLimit,
+            ffi::BLOSC2_ERROR_SCHUNK_COPY => Blosc2Error::SchunkCopy,
+            ffi::BLOSC2_ERROR_FRAME_TYPE => Blosc2Error::FrameType,
+            ffi::BLOSC2_ERROR_FILE_TRUNCATE => Blosc2Error::FileTruncate,
+            ffi::BLOSC2_ERROR_THREAD_CREATE => Blosc2Error::ThreadCreate,
+            ffi::BLOSC2_ERROR_POSTFILTER => Blosc2Error::PostFilter,
+            ffi::BLOSC2_ERROR_FRAME_SPECIAL => Blosc2Error::FrameSpecial,
+            ffi::BLOSC2_ERROR_SCHUNK_SPECIAL => Blosc2Error::SchunkSpecial,
+            ffi::BLOSC2_ERROR_PLUGIN_IO => Blosc2Error::PluginIO,
+            ffi::BLOSC2_ERROR_FILE_REMOVE => Blosc2Error::FileRemove,
+            ffi::BLOSC2_ERROR_NULL_POINTER => Blosc2Error::NullPointer,
+            ffi::BLOSC2_ERROR_INVALID_INDEX => Blosc2Error::InvalidIndex,
+            ffi::BLOSC2_ERROR_METALAYER_NOT_FOUND => Blosc2Error::MetalayerNotFound,
+            _ => panic!("Error code {} not matched in existing Error codes", code),
+        }
+    }
+}
 
 /// Default buffer size for intermediate de/compression results when required
 pub const BUFSIZE: usize = 8196_usize;
@@ -41,34 +195,34 @@ pub enum Codec {
 }
 
 impl TryInto<String> for Codec {
-    type Error = Box<dyn std::error::Error>;
+    type Error = Error;
     fn try_into(self) -> Result<String> {
         let mut compname = std::ptr::null();
         let rc = unsafe { ffi::blosc2_compcode_to_compname(self as _, &mut compname) };
         if rc == -1 {
-            return Err(format!("Unsupported Codec {:?}", self).into());
+            return Err(Error::Other(format!("Unsupported Codec {:?}", self)));
         }
         unsafe {
             CString::from_raw(compname as _)
                 .into_string()
-                .map_err(|e| e.to_string().into())
+                .map_err(|e| Error::Other(e.to_string()))
         }
     }
 }
 impl<'a> TryFrom<&'a str> for Codec {
-    type Error = Box<dyn std::error::Error>;
+    type Error = Error;
 
     fn try_from(value: &'a str) -> Result<Self> {
-        let compname = CString::new(value)?;
+        let compname = CString::new(value).map_err(|e| Error::Other(e.to_string()))?;
         let compcode = unsafe { ffi::blosc2_compname_to_compcode(compname.as_ptr()) };
         if compcode == -1 {
-            return Err(format!("Compcode {} not recognized", value).into());
+            return Err(Error::from(format!("Compcode {} not recognized", value)));
         }
         Codec::try_from(compcode)
     }
 }
 impl TryFrom<i32> for Codec {
-    type Error = Box<dyn std::error::Error>;
+    type Error = Error;
 
     fn try_from(compcode: i32) -> Result<Self> {
         match compcode as u32 {
@@ -138,8 +292,9 @@ pub mod schunk {
         /// Set url/file path to specify a file-backed `schunk`.
         /// if not set, defaults to an in-memory `schunk`
         pub fn set_urlpath<S: AsRef<Path>>(mut self, urlpath: S) -> Result<Self> {
-            self.0.urlpath =
-                CString::new(urlpath.as_ref().to_string_lossy().to_string())?.into_raw();
+            self.0.urlpath = CString::new(urlpath.as_ref().to_string_lossy().to_string())
+                .map_err(|e| Error::Other(e.to_string()))?
+                .into_raw();
             Ok(self)
         }
         /// Reference to the urlpath (if any)
@@ -160,7 +315,7 @@ pub mod schunk {
                 CStr::from_ptr(self.0.urlpath)
                     .to_str()
                     .map(|v| Some(v))
-                    .map_err(Into::into)
+                    .map_err(|e| Error::Other(e.to_string()))
             }
         }
         /// Set the contiguous nature of the `schunk`.
@@ -329,7 +484,7 @@ pub mod schunk {
                 )
             };
             if nbytes < 0 {
-                return Err(Box::new(Blosc2Error::from(nbytes)));
+                return Err(Error::Blosc2(Blosc2Error::from(nbytes)));
             }
             unsafe { dst.set_len(nbytes as usize) };
             Ok(Self::from_vec(dst))
@@ -370,7 +525,7 @@ pub mod schunk {
                 )
             };
             if rc < 0 {
-                return Err(Blosc2Error::from(rc as i32).into());
+                return Err(Error::Blosc2(Blosc2Error::from(rc as i32)));
             }
             Ok(Self { chunk, needs_free })
         }
@@ -437,7 +592,7 @@ pub mod schunk {
             let typesize = self.inner().typesize as _;
             if size != typesize {
                 let msg = format!("Size of T ({}) != schunk typesize ({})", size, typesize);
-                return Err(msg.into());
+                return Err(Error::Other(msg));
             }
             self.append_buffer_unchecked(data)
         }
@@ -722,7 +877,10 @@ pub mod read {
                 self.src_end = self.src_end - self.src_pos;
                 self.src_pos = 0;
             }
-            let n_bytes = self.rdr.read(&mut self.src[self.src_end..])?;
+            let n_bytes = self
+                .rdr
+                .read(&mut self.src[self.src_end..])
+                .map_err(|e| Error::Other(e.to_string()))?;
             self.src_end += n_bytes;
             Ok(n_bytes)
         }
@@ -732,7 +890,8 @@ pub mod read {
             if self.src_pos == self.src_end {
                 return Ok(()); // Reader is empty and nothing left to decompress
             }
-            let info = CompressedBufferInfo::try_from(&self.src[self.src_pos..self.src_end])?;
+            let info = CompressedBufferInfo::try_from(&self.src[self.src_pos..self.src_end])
+                .map_err(|e| Error::Other(e.to_string()))?;
             self.buf_end = decompress_into(&self.src[self.src_pos..self.src_end], &mut self.buf)?;
             self.buf_pos = 0;
             self.src_pos = info.cbytes; // decompression ran up to cbytes (compressed bytes read from src buffer)
@@ -796,7 +955,10 @@ pub mod read {
             count
         }
         fn refill_src(&mut self) -> Result<usize> {
-            self.src_end = self.rdr.read(&mut self.src)?;
+            self.src_end = self
+                .rdr
+                .read(&mut self.src)
+                .map_err(|e| Error::Other(e.to_string()))?;
             self.src_pos = 0;
             Ok(self.src_end)
         }
@@ -1058,7 +1220,7 @@ impl CompressedBufferInfo {
 }
 
 impl<T> TryFrom<&[T]> for CompressedBufferInfo {
-    type Error = Box<dyn std::error::Error>;
+    type Error = Error;
 
     #[inline]
     fn try_from(buf: &[T]) -> Result<Self> {
@@ -1345,130 +1507,6 @@ pub fn destroy() {
     unsafe { ffi::blosc2_destroy() }
 }
 
-/// Possible errors arising from Blosc2 library
-#[derive(Debug)]
-#[repr(i32)]
-pub enum Blosc2Error {
-    /// Generic failure
-    Failure = ffi::BLOSC2_ERROR_FAILURE,
-    /// Bad stream
-    Stream = ffi::BLOSC2_ERROR_STREAM,
-    /// Invalid data
-    Data = ffi::BLOSC2_ERROR_DATA,
-    /// Memory alloc/realloc failure
-    MemoryAlloc = ffi::BLOSC2_ERROR_MEMORY_ALLOC,
-    /// Not enough space to read
-    ReadBuffer = ffi::BLOSC2_ERROR_READ_BUFFER,
-    /// Not enough space to write
-    WriteBuffer = ffi::BLOSC2_ERROR_WRITE_BUFFER,
-    /// Codec not supported
-    CodecSupport = ffi::BLOSC2_ERROR_CODEC_SUPPORT,
-    /// Invalid parameter supplied to codec
-    CodecParam = ffi::BLOSC2_ERROR_CODEC_PARAM,
-    /// Codec dictionary error
-    CodecDict = ffi::BLOSC2_ERROR_CODEC_DICT,
-    /// Version not supported
-    VersionSupport = ffi::BLOSC2_ERROR_VERSION_SUPPORT,
-    /// Invalid value in header
-    InvalidHeader = ffi::BLOSC2_ERROR_INVALID_HEADER,
-    /// Invalid parameter supplied to function
-    InvalidParam = ffi::BLOSC2_ERROR_INVALID_PARAM,
-    /// File read failure
-    FileRead = ffi::BLOSC2_ERROR_FILE_READ,
-    /// File write failure
-    FileWrite = ffi::BLOSC2_ERROR_FILE_WRITE,
-    /// File open failure
-    FileOpen = ffi::BLOSC2_ERROR_FILE_OPEN,
-    /// Not found
-    NotFound = ffi::BLOSC2_ERROR_NOT_FOUND,
-    /// Bad run length encoding
-    RunLength = ffi::BLOSC2_ERROR_RUN_LENGTH,
-    /// Filter pipeline error
-    FilterPipeline = ffi::BLOSC2_ERROR_FILTER_PIPELINE,
-    /// Chunk insert failure
-    ChunkInsert = ffi::BLOSC2_ERROR_CHUNK_INSERT,
-    /// Chunk append failure
-    ChunkAppend = ffi::BLOSC2_ERROR_CHUNK_APPEND,
-    /// Chunk update failure
-    ChunkUpdate = ffi::BLOSC2_ERROR_CHUNK_UPDATE,
-    /// Sizes larger than 2gb not supported
-    TwoGBLimit = ffi::BLOSC2_ERROR_2GB_LIMIT,
-    /// Super-chunk copy failure
-    SchunkCopy = ffi::BLOSC2_ERROR_SCHUNK_COPY,
-    /// Wrong type for frame
-    FrameType = ffi::BLOSC2_ERROR_FRAME_TYPE,
-    /// File truncate failure
-    FileTruncate = ffi::BLOSC2_ERROR_FILE_TRUNCATE,
-    /// Thread or thread context creation failure
-    ThreadCreate = ffi::BLOSC2_ERROR_THREAD_CREATE,
-    /// Postfilter failure
-    PostFilter = ffi::BLOSC2_ERROR_POSTFILTER,
-    /// Special frame failure
-    FrameSpecial = ffi::BLOSC2_ERROR_FRAME_SPECIAL,
-    /// Special super-chunk failure
-    SchunkSpecial = ffi::BLOSC2_ERROR_SCHUNK_SPECIAL,
-    /// IO plugin error
-    PluginIO = ffi::BLOSC2_ERROR_PLUGIN_IO,
-    /// Remove file failure
-    FileRemove = ffi::BLOSC2_ERROR_FILE_REMOVE,
-    /// Pointer is null
-    NullPointer = ffi::BLOSC2_ERROR_NULL_POINTER,
-    /// Invalid index
-    InvalidIndex = ffi::BLOSC2_ERROR_INVALID_INDEX,
-    /// Metalayer has not been found
-    MetalayerNotFound = ffi::BLOSC2_ERROR_METALAYER_NOT_FOUND,
-}
-
-impl std::fmt::Display for Blosc2Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl std::error::Error for Blosc2Error {}
-
-impl From<i32> for Blosc2Error {
-    fn from(code: i32) -> Self {
-        match code {
-            ffi::BLOSC2_ERROR_FAILURE => Blosc2Error::Failure,
-            ffi::BLOSC2_ERROR_STREAM => Blosc2Error::Stream,
-            ffi::BLOSC2_ERROR_DATA => Blosc2Error::Data,
-            ffi::BLOSC2_ERROR_MEMORY_ALLOC => Blosc2Error::MemoryAlloc,
-            ffi::BLOSC2_ERROR_READ_BUFFER => Blosc2Error::ReadBuffer,
-            ffi::BLOSC2_ERROR_WRITE_BUFFER => Blosc2Error::WriteBuffer,
-            ffi::BLOSC2_ERROR_CODEC_SUPPORT => Blosc2Error::CodecSupport,
-            ffi::BLOSC2_ERROR_CODEC_PARAM => Blosc2Error::CodecParam,
-            ffi::BLOSC2_ERROR_CODEC_DICT => Blosc2Error::CodecDict,
-            ffi::BLOSC2_ERROR_VERSION_SUPPORT => Blosc2Error::VersionSupport,
-            ffi::BLOSC2_ERROR_INVALID_HEADER => Blosc2Error::InvalidHeader,
-            ffi::BLOSC2_ERROR_INVALID_PARAM => Blosc2Error::InvalidParam,
-            ffi::BLOSC2_ERROR_FILE_READ => Blosc2Error::FileRead,
-            ffi::BLOSC2_ERROR_FILE_WRITE => Blosc2Error::FileWrite,
-            ffi::BLOSC2_ERROR_FILE_OPEN => Blosc2Error::FileOpen,
-            ffi::BLOSC2_ERROR_NOT_FOUND => Blosc2Error::NotFound,
-            ffi::BLOSC2_ERROR_RUN_LENGTH => Blosc2Error::RunLength,
-            ffi::BLOSC2_ERROR_FILTER_PIPELINE => Blosc2Error::FilterPipeline,
-            ffi::BLOSC2_ERROR_CHUNK_INSERT => Blosc2Error::ChunkInsert,
-            ffi::BLOSC2_ERROR_CHUNK_APPEND => Blosc2Error::ChunkAppend,
-            ffi::BLOSC2_ERROR_CHUNK_UPDATE => Blosc2Error::ChunkUpdate,
-            ffi::BLOSC2_ERROR_2GB_LIMIT => Blosc2Error::TwoGBLimit,
-            ffi::BLOSC2_ERROR_SCHUNK_COPY => Blosc2Error::SchunkCopy,
-            ffi::BLOSC2_ERROR_FRAME_TYPE => Blosc2Error::FrameType,
-            ffi::BLOSC2_ERROR_FILE_TRUNCATE => Blosc2Error::FileTruncate,
-            ffi::BLOSC2_ERROR_THREAD_CREATE => Blosc2Error::ThreadCreate,
-            ffi::BLOSC2_ERROR_POSTFILTER => Blosc2Error::PostFilter,
-            ffi::BLOSC2_ERROR_FRAME_SPECIAL => Blosc2Error::FrameSpecial,
-            ffi::BLOSC2_ERROR_SCHUNK_SPECIAL => Blosc2Error::SchunkSpecial,
-            ffi::BLOSC2_ERROR_PLUGIN_IO => Blosc2Error::PluginIO,
-            ffi::BLOSC2_ERROR_FILE_REMOVE => Blosc2Error::FileRemove,
-            ffi::BLOSC2_ERROR_NULL_POINTER => Blosc2Error::NullPointer,
-            ffi::BLOSC2_ERROR_INVALID_INDEX => Blosc2Error::InvalidIndex,
-            ffi::BLOSC2_ERROR_METALAYER_NOT_FOUND => Blosc2Error::MetalayerNotFound,
-            _ => panic!("Error code {} not matched in existing Error codes", code),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use ctor::{ctor, dtor};
@@ -1563,7 +1601,7 @@ mod tests {
 
         let mut compressed: Vec<u8> = vec![];
         let mut compressor = read::Compressor::new(cursor);
-        compressor.read_to_end(&mut compressed)?;
+        compressor.read_to_end(&mut compressed).unwrap();
 
         let mut decompressed = vec![0u8; input.len()];
         decompress_into(&mut compressed, &mut decompressed)?;
@@ -1580,7 +1618,9 @@ mod tests {
 
         let mut decompressor = read::Decompressor::new(Cursor::new(stream));
         let mut decompressed = vec![];
-        decompressor.read_to_end(&mut decompressed)?;
+        decompressor
+            .read_to_end(&mut decompressed)
+            .map_err(|e| Error::Other(e.to_string()))?;
 
         assert_eq!(b"foobar", decompressed.as_slice());
 
@@ -1597,12 +1637,14 @@ mod tests {
 
         let mut compressed = vec![];
         let mut compressor = read::Compressor::new(Cursor::new(stream.clone()));
-        let n_compressed = std::io::copy(&mut compressor, &mut compressed)?;
+        let n_compressed = std::io::copy(&mut compressor, &mut compressed)
+            .map_err(|e| Error::Other(e.to_string()))?;
         assert_eq!(n_compressed, 1020);
 
         let mut decompressed = vec![];
         let mut decompressor = read::Decompressor::new(Cursor::new(compressed));
-        let n_decompressed = std::io::copy(&mut decompressor, &mut decompressed)?;
+        let n_decompressed = std::io::copy(&mut decompressor, &mut decompressed)
+            .map_err(|e| Error::Other(e.to_string()))?;
         assert_eq!(n_decompressed as usize, stream.len());
 
         assert_eq!(&decompressed, &stream);
@@ -1654,7 +1696,8 @@ mod tests {
             .set_dparams(&mut DParams::default());
         let mut schunk = schunk::SChunk::new(storage);
 
-        let nbytes = std::io::copy(&mut Cursor::new(input.clone()), &mut schunk)?;
+        let nbytes = std::io::copy(&mut Cursor::new(input.clone()), &mut schunk)
+            .map_err(|e| Error::Other(e.to_string()))?;
         assert_eq!(nbytes as usize, input.len());
 
         let ratio = schunk.compression_ratio(); // ~36.
@@ -1663,7 +1706,7 @@ mod tests {
 
         let mut uncompressed = vec![];
         let mut decoder = schunk::SChunkDecoder::new(&mut schunk);
-        let n = std::io::copy(&mut decoder, &mut uncompressed)?;
+        let n = std::io::copy(&mut decoder, &mut uncompressed).unwrap();
         assert_eq!(input, uncompressed.as_slice());
         assert_eq!(n as usize, input.len());
 

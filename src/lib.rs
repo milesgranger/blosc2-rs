@@ -212,6 +212,12 @@ pub mod schunk {
         pub(crate) needs_free: bool,
     }
 
+    impl From<Vec<u8>> for Chunk {
+        fn from(v: Vec<u8>) -> Self {
+            Self::from_vec(v)
+        }
+    }
+
     impl Chunk {
         /// Create a new `Chunk` directly from a pointer, you probably
         /// want `Chunk::from_schunk` instead.

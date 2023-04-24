@@ -1069,6 +1069,40 @@ impl<T> TryFrom<&[T]> for CompressedBufferInfo {
         })
     }
 }
+
+/// Retrieve a number of elements from a `Chunk`
+///
+/// Example
+/// -------
+/// ```
+/// use blosc2::{getitems, compress};
+///
+/// let chunk = compress(&vec![0u32, 1, 2, 3, 4], None, None, None).unwrap();
+/// let offset = 1;
+/// let n_items = 2;
+/// let items = getitems::<u32>(&chunk, offset, n_items).unwrap();
+/// assert_eq!(items, vec![1u32, 2]);
+/// ```
+#[inline]
+pub fn getitems<T>(src: &[u8], offset: usize, n_items: usize) -> Result<Vec<T>> {
+    let mut dst = Vec::with_capacity(n_items);
+    let nbytes = unsafe {
+        ffi::blosc2_getitem(
+            src.as_ptr() as *const c_void,
+            src.len() as _,
+            offset as _,
+            n_items as _,
+            dst.as_mut_ptr() as *mut c_void,
+            (n_items * mem::size_of::<T>()) as i32,
+        )
+    };
+    if nbytes < 0 {
+        return Err(Blosc2Error::from(nbytes).into());
+    }
+    unsafe { dst.set_len(nbytes as usize / mem::size_of::<T>()) };
+    Ok(dst)
+}
+
 /// Context interface to compression, does not require call to init/destroy. For
 /// use in multithreaded applications
 #[inline]
@@ -1093,7 +1127,7 @@ pub fn compress_into_ctx<T>(src: &[T], dst: &mut [u8], ctx: &mut Context) -> Res
         ffi::blosc2_compress_ctx(
             ctx.0,
             src.as_ptr() as *const c_void,
-            src.len() as _,
+            (src.len() * mem::size_of::<T>()) as _,
             dst.as_mut_ptr() as *mut c_void,
             dst.len() as _,
         )
@@ -1124,7 +1158,7 @@ pub fn compress<T>(
         return Ok(vec![]);
     }
     let mut dst = vec![0u8; max_compress_len(src)];
-    let n_bytes = compress_into(src, &mut dst, clevel, filter, codec)?;
+    let n_bytes = compress_into::<T>(src, &mut dst, clevel, filter, codec)?;
 
     dst.truncate(n_bytes);
     Ok(dst)
@@ -1149,7 +1183,7 @@ pub fn compress_into<T>(
             filter.unwrap_or_default() as _,
             typesize as _,
             src.as_ptr() as *const c_void,
-            src.len() as _,
+            (src.len() * mem::size_of::<T>()) as _,
             dst.as_mut_ptr() as *mut c_void,
             dst.len() as _,
         )

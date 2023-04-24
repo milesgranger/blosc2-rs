@@ -219,9 +219,16 @@ pub mod schunk {
             Self { chunk, needs_free }
         }
 
+        pub fn from_vec(v: Vec<u8>) -> Self {
+            let mut v = v;
+            let ptr = v.as_mut_ptr();
+            std::mem::forget(v);
+            Self::new(ptr as _, true)
+        }
+
         /// Create a chunk made of uninitialized values
         ///
-        /// Example
+        /// Examplek
         /// -------
         /// ```
         /// use blosc2::CParams;
@@ -249,9 +256,7 @@ pub mod schunk {
                 return Err("Failed to create uninitialized chunk".into());
             }
             unsafe { dst.set_len(nbytes as _) };
-            let ptr = dst.as_mut_ptr();
-            std::mem::forget(dst);
-            Ok(Self::new(ptr as _, true))
+            Ok(Self::from_vec(dst))
         }
 
         /// Create a chunk made of zeros
@@ -262,14 +267,15 @@ pub mod schunk {
         /// use blosc2::CParams;
         /// use blosc2::schunk::Chunk;
         ///
-        /// let chunk = Chunk::zeros::<u8>(CParams::default(), 10).unwrap();
-        /// assert_eq!(chunk.info().unwrap().nbytes(), 10);
+        /// let cparams = CParams::default().set_typesize::<u32>();
+        /// let chunk = Chunk::zeros::<u32>(cparams, 10).unwrap();
+        /// assert_eq!(chunk.info().unwrap().nbytes(), 40);  // 10 elements * 4 bytes each
         /// ```
         pub fn zeros<T>(cparams: CParams, len: usize) -> Result<Self> {
             if std::mem::size_of::<T>() != cparams.0.typesize as usize {
                 return Err("typesize mismatch between CParams and T".into());
             }
-            let mut dst: Vec<T> = Vec::with_capacity(
+            let mut dst = Vec::with_capacity(
                 (len * cparams.0.typesize as usize) + ffi::BLOSC_EXTENDED_HEADER_LENGTH as usize,
             );
 
@@ -285,9 +291,7 @@ pub mod schunk {
                 return Err(Box::new(Blosc2Error::from(nbytes)));
             }
             unsafe { dst.set_len(nbytes as usize) };
-            let ptr = dst.as_mut_ptr();
-            std::mem::forget(dst);
-            Ok(Self::new(ptr as _, true))
+            Ok(Self::from_vec(dst))
         }
 
         /// Decompress the current chunk

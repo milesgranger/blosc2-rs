@@ -1,10 +1,8 @@
 //! Blosc2 Rust bindings.
 
-use std::ffi::c_void;
-use std::ffi::CStr;
-use std::ffi::CString;
-
 use blosc2_sys as ffi;
+use std::ffi::{c_void, CStr, CString};
+use std::mem;
 
 /// Result type used in this library
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -230,7 +228,7 @@ pub mod schunk {
         pub fn from_vec(v: Vec<u8>) -> Self {
             let mut v = v;
             let ptr = v.as_mut_ptr();
-            std::mem::forget(v);
+            mem::forget(v);
             Self::new(ptr as _, true)
         }
 
@@ -246,7 +244,7 @@ pub mod schunk {
         /// assert_eq!(chunk.info().unwrap().nbytes(), 10);
         /// ```
         pub fn uninit<T>(cparams: CParams, len: usize) -> Result<Self> {
-            if std::mem::size_of::<T>() != cparams.0.typesize as usize {
+            if mem::size_of::<T>() != cparams.0.typesize as usize {
                 return Err("typesize mismatch between CParams and T".into());
             }
             let mut dst = Vec::with_capacity(
@@ -280,7 +278,7 @@ pub mod schunk {
         /// assert_eq!(chunk.decompress::<f32>().unwrap(), vec![0.123_f32, 0.123, 0.123, 0.123]);
         /// ```
         pub fn repeatval<T>(cparams: CParams, value: T, len: usize) -> Result<Self> {
-            if std::mem::size_of::<T>() != cparams.0.typesize as usize {
+            if mem::size_of::<T>() != cparams.0.typesize as usize {
                 return Err("typesize mismatch between CParams and T".into());
             }
             let mut dst = Vec::with_capacity(
@@ -315,7 +313,7 @@ pub mod schunk {
         /// assert_eq!(chunk.info().unwrap().nbytes(), 40);  // 10 elements * 4 bytes each
         /// ```
         pub fn zeros<T>(cparams: CParams, len: usize) -> Result<Self> {
-            if std::mem::size_of::<T>() != cparams.0.typesize as usize {
+            if mem::size_of::<T>() != cparams.0.typesize as usize {
                 return Err("typesize mismatch between CParams and T".into());
             }
             let mut dst = Vec::with_capacity(
@@ -435,7 +433,7 @@ pub mod schunk {
                 return Ok(self.inner().nchunks as usize);
             }
 
-            let size = std::mem::size_of::<T>();
+            let size = mem::size_of::<T>();
             let typesize = self.inner().typesize as _;
             if size != typesize {
                 let msg = format!("Size of T ({}) != schunk typesize ({})", size, typesize);
@@ -511,7 +509,7 @@ pub mod schunk {
                 unsafe { ffi::blosc2_schunk_from_buffer(buf.as_mut_ptr(), buf.len() as _, false) };
 
             // copy is false, schunk/blosc2 takes ownership, and set that it'll be responsible to free it
-            std::mem::forget(buf);
+            mem::forget(buf);
             unsafe { ffi::blosc2_schunk_avoid_cframe_free(schunk, false) };
             Ok(Self(schunk))
         }
@@ -892,7 +890,7 @@ impl CParams {
     }
     /// Set the type size
     pub fn set_typesize<T>(mut self) -> Self {
-        self.0.typesize = std::mem::size_of::<T>() as _;
+        self.0.typesize = mem::size_of::<T>() as _;
         self
     }
     pub fn get_typesize(&self) -> usize {
@@ -918,7 +916,7 @@ impl Default for CParams {
 impl<T> From<&T> for CParams {
     fn from(_: &T) -> Self {
         let mut cparams = CParams::default();
-        cparams.0.typesize = std::mem::size_of::<T>() as _;
+        cparams.0.typesize = mem::size_of::<T>() as _;
         cparams
     }
 }
@@ -1126,7 +1124,7 @@ pub fn compress_into_ctx<T>(src: &[T], dst: &mut [u8], ctx: &mut Context) -> Res
 /// Return the max size a compressed buffer needs to be to hold `src`
 #[inline(always)]
 pub fn max_compress_len<T>(src: &[T]) -> usize {
-    (src.len() * std::mem::size_of::<T>()) + ffi::BLOSC2_MAX_OVERHEAD as usize
+    (src.len() * mem::size_of::<T>()) + ffi::BLOSC2_MAX_OVERHEAD as usize
 }
 
 #[inline]
@@ -1157,7 +1155,7 @@ pub fn compress_into<T>(
     if src.is_empty() {
         return Ok(0);
     }
-    let typesize = std::mem::size_of::<T>();
+    let typesize = mem::size_of::<T>();
     set_compressor(codec.unwrap_or_default())?;
     let n_bytes = unsafe {
         ffi::blosc2_compress(
@@ -1185,7 +1183,7 @@ pub fn decompress_ctx<T>(src: &[u8], ctx: &mut Context) -> Result<Vec<T>> {
         return Ok(vec![]);
     }
     let info = CompressedBufferInfo::try_from(src)?;
-    let n_elements = info.nbytes as usize / std::mem::size_of::<T>();
+    let n_elements = info.nbytes as usize / mem::size_of::<T>();
     let mut dst = Vec::with_capacity(n_elements);
 
     let n_bytes = unsafe {
@@ -1238,7 +1236,7 @@ pub fn decompress<T>(src: &[u8]) -> Result<Vec<T>> {
     // blosc2 plays by bytes, we'll go by however many bytes per element
     // to set the vec length in actual elements
     let info = CompressedBufferInfo::try_from(src)?;
-    let n_elements = info.nbytes as usize / std::mem::size_of::<T>();
+    let n_elements = info.nbytes as usize / mem::size_of::<T>();
     let mut dst = Vec::with_capacity(n_elements);
 
     let n_bytes = unsafe {

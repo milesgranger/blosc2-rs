@@ -257,11 +257,46 @@ pub mod schunk {
                     cparams.0,
                     len as i32 * cparams.0.typesize,
                     dst.as_mut_ptr() as *mut c_void,
-                    dst.capacity() as i32 * cparams.0.typesize, // size in bytes
+                    dst.capacity() as i32,
                 )
             };
             if nbytes < 0 {
                 return Err("Failed to create uninitialized chunk".into());
+            }
+            unsafe { dst.set_len(nbytes as _) };
+            Ok(Self::from_vec(dst))
+        }
+
+        /// Create a chunk made of repeating a value
+        ///
+        /// Examplek
+        /// -------
+        /// ```
+        /// use blosc2::CParams;
+        /// use blosc2::schunk::Chunk;
+        ///
+        /// let mut chunk = Chunk::repeatval::<f32>(CParams::default().set_typesize::<f32>(), 0.123, 4).unwrap();
+        /// assert_eq!(chunk.info().unwrap().nbytes(), 16);  // 4 elements * 4 bytes each
+        /// assert_eq!(chunk.decompress::<f32>().unwrap(), vec![0.123_f32, 0.123, 0.123, 0.123]);
+        /// ```
+        pub fn repeatval<T>(cparams: CParams, value: T, len: usize) -> Result<Self> {
+            if std::mem::size_of::<T>() != cparams.0.typesize as usize {
+                return Err("typesize mismatch between CParams and T".into());
+            }
+            let mut dst = Vec::with_capacity(
+                (len * cparams.0.typesize as usize) + ffi::BLOSC_EXTENDED_HEADER_LENGTH as usize,
+            );
+            let nbytes = unsafe {
+                ffi::blosc2_chunk_repeatval(
+                    cparams.0,
+                    len as i32 * cparams.0.typesize,
+                    dst.as_mut_ptr() as _,
+                    dst.capacity() as _,
+                    &value as *const T as _,
+                )
+            };
+            if nbytes < 0 {
+                return Err("Failed to create chunk".into());
             }
             unsafe { dst.set_len(nbytes as _) };
             Ok(Self::from_vec(dst))

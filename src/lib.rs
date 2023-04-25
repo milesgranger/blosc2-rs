@@ -396,16 +396,27 @@ pub mod schunk {
         /// let buf: Vec<u8> = compress(&vec![0i32, 1, 2, 3, 4], None, None, None).unwrap();
         /// assert!(Chunk::from_vec(buf).is_ok());
         /// ```
-
         #[inline]
         pub fn from_vec(v: Vec<u8>) -> Result<Self> {
             let mut v = v;
+            v.shrink_to_fit();
             if let Err(_) = CompressedBufferInfo::try_from(v.as_slice()) {
                 return Err("Appears this buffer is not a valid blosc2 chunk".into());
             }
             let ptr = v.as_mut_ptr();
             mem::forget(v);
             Ok(Self::new(ptr as _, true))
+        }
+
+        /// Export this Chunk into a `Vec<u8>`
+        /// Maybe clone underlying vec if it's managed by blosc2
+        pub fn into_vec(self) -> Result<Vec<u8>> {
+            let info = self.info()?;
+            let buf = unsafe { Vec::from_raw_parts(self.chunk, info.cbytes(), info.cbytes()) };
+            if !self.needs_free {
+                return Ok(buf.clone());
+            }
+            Ok(buf)
         }
 
         /// Get the raw buffer of this chunk
@@ -432,6 +443,11 @@ pub mod schunk {
         pub fn len<T>(&self) -> Result<usize> {
             CompressedBufferInfo::try_from(self.chunk as *const c_void)
                 .map(|info| info.nbytes() / mem::size_of::<T>())
+        }
+
+        #[inline]
+        pub fn getitems<T>(&self, offset: usize, n_items: usize) -> Result<Vec<T>> {
+            getitems(self.as_slice()?, offset, n_items)
         }
 
         /// Create a chunk made of uninitialized values

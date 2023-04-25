@@ -366,6 +366,7 @@ pub mod schunk {
     }
 
     impl From<Vec<u8>> for Chunk {
+        #[inline]
         fn from(v: Vec<u8>) -> Self {
             Self::from_vec(v)
         }
@@ -380,11 +381,35 @@ pub mod schunk {
 
         /// Construct Chunk from vector of bytes, this Vec is assumed to be the result of a valid
         /// chunk de/compression or other initialization method like uinit/zeros etc.
+        #[inline]
         pub fn from_vec(v: Vec<u8>) -> Self {
             let mut v = v;
             let ptr = v.as_mut_ptr();
             mem::forget(v);
             Self::new(ptr as _, true)
+        }
+
+        /// Get the raw buffer of this chunk
+        pub fn as_slice(&self) -> Result<&[u8]> {
+            let info = CompressedBufferInfo::try_from(self.chunk as *const c_void)?;
+            let slice = unsafe { std::slice::from_raw_parts(self.chunk, info.cbytes()) };
+            Ok(slice)
+        }
+
+        /// Return the number of elements in the compressed Chunk
+        ///
+        /// Example
+        /// -------
+        /// ```
+        /// use blosc2::{schunk::Chunk, compress};
+        ///
+        /// let chunk: Chunk = compress(&vec![0i32, 1, 2, 3, 4], None, None, None).unwrap().into();
+        /// assert_eq!(chunk.len::<i32>().unwrap(), 5);
+        /// ```
+        #[inline]
+        pub fn len<T>(&self) -> Result<usize> {
+            CompressedBufferInfo::try_from(self.chunk as *const c_void)
+                .map(|info| info.nbytes() / mem::size_of::<T>())
         }
 
         /// Create a chunk made of uninitialized values
@@ -1069,6 +1094,32 @@ impl<T> TryFrom<&[T]> for CompressedBufferInfo {
         })
     }
 }
+impl TryFrom<*const c_void> for CompressedBufferInfo {
+    type Error = Error;
+
+    #[inline]
+    fn try_from(ptr: *const c_void) -> Result<Self> {
+        let mut nbytes = 0i32;
+        let mut cbytes = 0i32;
+        let mut blocksize = 0i32;
+        let code = unsafe {
+            ffi::blosc2_cbuffer_sizes(
+                ptr,
+                &mut nbytes as *mut _,
+                &mut cbytes as *mut _,
+                &mut blocksize as *mut _,
+            )
+        };
+        if code < 0 {
+            return Err(Blosc2Error::from(code).into());
+        }
+        Ok(CompressedBufferInfo {
+            nbytes: nbytes as _,
+            cbytes: cbytes as _,
+            blocksize: blocksize as _,
+        })
+    }
+}
 
 /// Retrieve a number of elements from a `Chunk`
 ///
@@ -1078,6 +1129,7 @@ impl<T> TryFrom<&[T]> for CompressedBufferInfo {
 /// use blosc2::{getitems, compress};
 ///
 /// let chunk = compress(&vec![0u32, 1, 2, 3, 4], None, None, None).unwrap();
+///
 /// let offset = 1;
 /// let n_items = 2;
 /// let items = getitems::<u32>(&chunk, offset, n_items).unwrap();
@@ -1245,6 +1297,13 @@ pub fn decompress_into_ctx<T>(src: &[T], dst: &mut [T], ctx: &mut Context) -> Re
     }
     debug_assert_eq!(n_bytes as usize, info.nbytes);
     Ok(n_bytes as _)
+}
+
+/// Get the number of elements `T` in the compressed chunk
+#[inline]
+pub fn len<T>(src: &[u8]) -> Result<usize> {
+    let info = CompressedBufferInfo::try_from(src)?;
+    Ok(info.nbytes() / mem::size_of::<T>())
 }
 
 #[inline]

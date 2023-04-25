@@ -2,7 +2,7 @@
 
 use blosc2_sys as ffi;
 use std::ffi::{c_void, CStr, CString};
-use std::mem;
+use std::{io, mem};
 
 /// Result type used in this library
 pub type Result<T> = std::result::Result<T, Error>;
@@ -31,6 +31,11 @@ impl<'a> From<&'a str> for Error {
     }
 }
 
+impl From<Error> for io::Error {
+    fn from(err: Error) -> io::Error {
+        io::Error::new(io::ErrorKind::Other, err.to_string())
+    }
+}
 impl std::error::Error for Error {}
 
 impl std::fmt::Display for Error {
@@ -787,8 +792,7 @@ pub mod schunk {
 
     impl io::Write for SChunk {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            self.append_buffer(buf)
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            self.append_buffer(buf)?;
             Ok(buf.len())
         }
         fn flush(&mut self) -> io::Result<()> {
@@ -830,25 +834,18 @@ pub mod schunk {
                 self.buf.set_position(0);
 
                 // Get chunk and check if we can decompress directly into caller's buffer
-                let chunk = Chunk::from_schunk(self.schunk, self.nchunk)
-                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
-                let nbytes = chunk
-                    .info()
-                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?
-                    .nbytes();
+                let chunk = Chunk::from_schunk(self.schunk, self.nchunk)?;
+                let nbytes = chunk.info()?.nbytes();
 
                 if nbytes <= buf.len() {
-                    self.schunk
-                        .decompress_chunk(self.nchunk, buf)
-                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                    self.schunk.decompress_chunk(self.nchunk, buf)?;
                     self.nchunk += 1;
                     return Ok(nbytes);
                 } else {
                     self.buf.get_mut().resize(nbytes as _, 0u8);
-                    let nbytes_written = self
+                    let nbytes_written: usize = self
                         .schunk
-                        .decompress_chunk(self.nchunk, self.buf.get_mut().as_mut_slice())
-                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                        .decompress_chunk(self.nchunk, self.buf.get_mut().as_mut_slice())?;
 
                     // These should always be equal, otherwise blosc2 gave the wrong expected
                     // uncompressed size of this chunk.

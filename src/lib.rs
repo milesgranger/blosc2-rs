@@ -871,14 +871,17 @@ pub mod schunk {
 /// -------
 /// ```
 /// use blosc2::CParams;
-/// let values = vec![0, 1, 2, 3];
-/// let cparams = CParams::from(&values[0])
+/// let values = vec![0u8, 1, 2, 3];
+/// let cparams = CParams::new::<u8>()
 ///     .set_nthreads(2);  // Optionally adjust default values
 /// ```
 /// [blosc2_cparams]: blosc2_sys::blosc2_cparams
 pub struct CParams(ffi::blosc2_cparams);
 
 impl CParams {
+    pub fn new<T>() -> Self {
+        Self::default().set_typesize::<T>()
+    }
     pub(crate) fn into_inner(self) -> ffi::blosc2_cparams {
         self.0
     }
@@ -935,7 +938,7 @@ impl Default for CParams {
         cparams.typesize = 1;
         cparams.splitmode = ffi::BLOSC_FORWARD_COMPAT_SPLIT as _;
         cparams.filters[ffi::BLOSC2_MAX_FILTERS as usize - 1] = Filter::default() as _;
-        cparams.nthreads = 1;
+        cparams.nthreads = get_nthreads() as _;
         Self(cparams)
     }
 }

@@ -365,9 +365,10 @@ pub mod schunk {
         pub(crate) needs_free: bool,
     }
 
-    impl From<Vec<u8>> for Chunk {
+    impl TryFrom<Vec<u8>> for Chunk {
+        type Error = Error;
         #[inline]
-        fn from(v: Vec<u8>) -> Self {
+        fn try_from(v: Vec<u8>) -> Result<Self> {
             Self::from_vec(v)
         }
     }
@@ -381,12 +382,25 @@ pub mod schunk {
 
         /// Construct Chunk from vector of bytes, this Vec is assumed to be the result of a valid
         /// chunk de/compression or other initialization method like uinit/zeros etc.
+        ///
+        /// Example
+        /// -------
+        /// ```
+        /// use blosc2::{schunk::Chunk, compress};
+        ///
+        /// let buf: Vec<u8> = compress(&vec![0i32, 1, 2, 3, 4], None, None, None).unwrap();
+        /// assert!(Chunk::from_vec(buf).is_ok());
+        /// ```
+
         #[inline]
-        pub fn from_vec(v: Vec<u8>) -> Self {
+        pub fn from_vec(v: Vec<u8>) -> Result<Self> {
             let mut v = v;
+            if let Err(_) = CompressedBufferInfo::try_from(v.as_slice()) {
+                return Err("Appears this buffer is not a valid blosc2 chunk".into());
+            }
             let ptr = v.as_mut_ptr();
             mem::forget(v);
-            Self::new(ptr as _, true)
+            Ok(Self::new(ptr as _, true))
         }
 
         /// Get the raw buffer of this chunk
@@ -403,7 +417,10 @@ pub mod schunk {
         /// ```
         /// use blosc2::{schunk::Chunk, compress};
         ///
-        /// let chunk: Chunk = compress(&vec![0i32, 1, 2, 3, 4], None, None, None).unwrap().into();
+        /// let chunk: Chunk = compress(&vec![0i32, 1, 2, 3, 4], None, None, None)
+        ///    .unwrap()
+        ///    .try_into()
+        ///    .unwrap();
         /// assert_eq!(chunk.len::<i32>().unwrap(), 5);
         /// ```
         #[inline]
@@ -442,7 +459,7 @@ pub mod schunk {
                 return Err("Failed to create uninitialized chunk".into());
             }
             unsafe { dst.set_len(nbytes as _) };
-            Ok(Self::from_vec(dst))
+            Self::from_vec(dst)
         }
 
         /// Create a chunk made of repeating a value
@@ -477,7 +494,7 @@ pub mod schunk {
                 return Err("Failed to create chunk".into());
             }
             unsafe { dst.set_len(nbytes as _) };
-            Ok(Self::from_vec(dst))
+            Self::from_vec(dst)
         }
 
         /// Create a chunk made of zeros
@@ -512,7 +529,7 @@ pub mod schunk {
                 return Err(Error::Blosc2(Blosc2Error::from(nbytes)));
             }
             unsafe { dst.set_len(nbytes as usize) };
-            Ok(Self::from_vec(dst))
+            Self::from_vec(dst)
         }
 
         /// Decompress the current chunk

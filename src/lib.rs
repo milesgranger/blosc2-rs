@@ -447,6 +447,13 @@ pub mod schunk {
 
         #[inline]
         pub fn getitems<T>(&self, offset: usize, n_items: usize) -> Result<Vec<T>> {
+            if self.len::<T>()? < offset + n_items {
+                return Err(format!(
+                    "Would be out of bounds. Chunk contains {} elements",
+                    self.len::<T>()?
+                )
+                .into());
+            }
             getitems(self.as_slice()?, offset, n_items)
         }
 
@@ -551,6 +558,44 @@ pub mod schunk {
             }
             unsafe { dst.set_len(nbytes as usize) };
             Self::from_vec(dst)
+        }
+
+        /// Compression ratio of the `Chunk`
+        ///
+        /// Example
+        /// -------
+        /// ```
+        /// use blosc2::schunk::Chunk;
+        ///
+        /// let chunk = Chunk::compress(&vec![0i32; 1_000], None, None, None).unwrap();
+        /// let ratio = chunk.compression_ratio().unwrap();
+        /// assert_eq!(ratio, 125.0);
+        /// ```
+        pub fn compression_ratio(&self) -> Result<f32> {
+            let info = self.info()?;
+            if info.cbytes() == 0 {
+                return Ok(0f32);
+            }
+            Ok(info.nbytes() as f32 / info.cbytes() as f32)
+        }
+
+        /// Helper method to construct a `Chunk` directly from compression.
+        /// This is equivelent to:
+        /// ```
+        /// use blosc2::{compress, schunk::Chunk};
+        ///
+        /// let compressed = compress(&vec![0u8, 1, 2, 3], None, None, None).unwrap();
+        /// let chunk = Chunk::from_vec(compressed).unwrap();
+        /// assert_eq!(chunk.len::<u8>().unwrap(), 4);
+        /// ```
+        #[inline]
+        pub fn compress<T>(
+            src: &[T],
+            clevel: Option<CLevel>,
+            filter: Option<Filter>,
+            codec: Option<Codec>,
+        ) -> Result<Self> {
+            crate::compress(src, clevel, filter, codec).map(Self::from_vec)?
         }
 
         /// Decompress the current chunk

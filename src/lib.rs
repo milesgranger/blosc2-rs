@@ -393,7 +393,7 @@ pub mod schunk {
         /// ```
         /// use blosc2::{schunk::Chunk, compress};
         ///
-        /// let buf: Vec<u8> = compress(&vec![0i32, 1, 2, 3, 4], None, None, None).unwrap();
+        /// let buf: Vec<u8> = compress(&vec![0i32, 1, 2, 3, 4], None, None, None, None).unwrap();
         /// assert!(Chunk::from_vec(buf).is_ok());
         /// ```
         #[inline]
@@ -433,7 +433,7 @@ pub mod schunk {
         /// ```
         /// use blosc2::{schunk::Chunk, compress};
         ///
-        /// let chunk: Chunk = compress(&vec![0i32, 1, 2, 3, 4], None, None, None)
+        /// let chunk: Chunk = compress(&vec![0i32, 1, 2, 3, 4], None, None, None, None)
         ///    .unwrap()
         ///    .try_into()
         ///    .unwrap();
@@ -567,7 +567,7 @@ pub mod schunk {
         /// ```
         /// use blosc2::schunk::Chunk;
         ///
-        /// let chunk = Chunk::compress(&vec![0i32; 1_000], None, None, None).unwrap();
+        /// let chunk = Chunk::compress(&vec![0i32; 1_000], None, None, None, None).unwrap();
         /// let ratio = chunk.compression_ratio().unwrap();
         /// assert_eq!(ratio, 125.0);
         /// ```
@@ -584,18 +584,19 @@ pub mod schunk {
         /// ```
         /// use blosc2::{compress, schunk::Chunk};
         ///
-        /// let compressed = compress(&vec![0u8, 1, 2, 3], None, None, None).unwrap();
+        /// let compressed = compress(&vec![0u8, 1, 2, 3], None, None, None, None).unwrap();
         /// let chunk = Chunk::from_vec(compressed).unwrap();
         /// assert_eq!(chunk.len::<u8>().unwrap(), 4);
         /// ```
         #[inline]
         pub fn compress<T>(
             src: &[T],
+            typesize: Option<usize>,
             clevel: Option<CLevel>,
             filter: Option<Filter>,
             codec: Option<Codec>,
         ) -> Result<Self> {
-            crate::compress(src, clevel, filter, codec).map(Self::from_vec)?
+            crate::compress(src, typesize, clevel, filter, codec).map(Self::from_vec)?
         }
 
         /// Decompress the current chunk
@@ -675,6 +676,7 @@ pub mod schunk {
         pub fn new(storage: Storage) -> Self {
             let mut storage = storage;
             let schunk = unsafe { ffi::blosc2_schunk_new(&mut storage.0) };
+            unsafe { (*schunk).typesize = 1 };
             Self(schunk)
         }
 
@@ -747,6 +749,28 @@ pub mod schunk {
             }
         }
 
+        /// Fill a buffer from the schunk data, at a given offset.
+        /// Return number of bytes copied into buffer, can be less if size with offset goes
+        /// beyond schunk bytes, this will be the uncompressed data
+        pub fn get_slice_buffer(&self, offset: usize, buf: &mut [u8]) -> Result<usize> {
+            if offset >= self.cbytes() {
+                return Err(Error::from("Out of bounds"));
+            }
+            let nbytes = std::cmp::min(self.cbytes() - offset, buf.len());
+            let rc = unsafe {
+                ffi::blosc2_schunk_get_slice_buffer(
+                    self.0,
+                    offset as _,
+                    (offset + nbytes) as _,
+                    buf.as_mut_ptr() as _,
+                )
+            };
+            if rc != 0 {
+                return Err(Blosc2Error::from(rc).into());
+            }
+            Ok(nbytes)
+        }
+
         /// Export this `SChunk` into a buffer
         pub fn into_vec(self) -> Result<Vec<u8>> {
             let mut needs_free = true;
@@ -757,9 +781,8 @@ pub mod schunk {
             }
 
             let mut buf = unsafe { Vec::from_raw_parts(ptr, len as _, len as _) };
-            if needs_free {
+            if !needs_free {
                 buf = buf.clone(); // Clone into new since blosc is about to free this one
-                unsafe { ffi::free(ptr as _) };
             }
             Ok(buf)
         }
@@ -770,6 +793,11 @@ pub mod schunk {
             let mut buf = buf;
             let schunk =
                 unsafe { ffi::blosc2_schunk_from_buffer(buf.as_mut_ptr(), buf.len() as _, false) };
+            if schunk.is_null() {
+                return Err(Error::from(
+                    "Failed to get schunk from buffer; might not be valid buffer for schunk",
+                ));
+            }
 
             // copy is false, schunk/blosc2 takes ownership, and set that it'll be responsible to free it
             mem::forget(buf);
@@ -940,6 +968,11 @@ impl CParams {
     pub fn new<T>() -> Self {
         Self::default().set_typesize::<T>()
     }
+    pub fn from_typesize(typesize: usize) -> Self {
+        let mut cparams = Self::default();
+        cparams.0.typesize = typesize as _;
+        cparams
+    }
     pub(crate) fn into_inner(self) -> ffi::blosc2_cparams {
         self.0
     }
@@ -1039,7 +1072,7 @@ impl Default for DParams {
     #[inline]
     fn default() -> Self {
         let mut dparams = ffi::blosc2_dparams::default();
-        dparams.nthreads = 1;
+        dparams.nthreads = get_nthreads() as _;
         Self(dparams)
     }
 }
@@ -1206,7 +1239,7 @@ impl TryFrom<*const c_void> for CompressedBufferInfo {
 /// ```
 /// use blosc2::{getitems, compress};
 ///
-/// let chunk = compress(&vec![0u32, 1, 2, 3, 4], None, None, None).unwrap();
+/// let chunk = compress(&vec![0u32, 1, 2, 3, 4], None, None, None, None).unwrap();
 ///
 /// let offset = 1;
 /// let n_items = 2;
@@ -1257,7 +1290,7 @@ pub fn compress_into_ctx<T>(src: &[T], dst: &mut [u8], ctx: &mut Context) -> Res
         ffi::blosc2_compress_ctx(
             ctx.0,
             src.as_ptr() as *const c_void,
-            (src.len() * mem::size_of::<T>()) as _,
+            (src.len() * ctx.get_cparams()?.get_typesize()) as _,
             dst.as_mut_ptr() as *mut c_void,
             dst.len() as _,
         )
@@ -1280,6 +1313,7 @@ pub fn max_compress_len<T>(src: &[T]) -> usize {
 #[inline]
 pub fn compress<T>(
     src: &[T],
+    typesize: Option<usize>,
     clevel: Option<CLevel>,
     filter: Option<Filter>,
     codec: Option<Codec>,
@@ -1287,10 +1321,27 @@ pub fn compress<T>(
     if src.is_empty() {
         return Ok(vec![]);
     }
-    let mut dst = vec![0u8; max_compress_len(src)];
-    let n_bytes = compress_into::<T>(src, &mut dst, clevel, filter, codec)?;
+    let typesize = typesize.unwrap_or_else(|| mem::size_of::<T>());
+    set_compressor(codec.unwrap_or_default())?;
 
-    dst.truncate(n_bytes);
+    let mut dst = Vec::with_capacity(max_compress_len(src));
+    let n_bytes = unsafe {
+        ffi::blosc2_compress(
+            clevel.unwrap_or_default() as _,
+            filter.unwrap_or_default() as _,
+            typesize as _,
+            src.as_ptr() as *const c_void,
+            (src.len() * mem::size_of::<T>()) as _,
+            dst.as_mut_ptr() as *mut c_void,
+            dst.capacity() as _,
+        )
+    };
+    if n_bytes < 0 {
+        return Err(Blosc2Error::from(n_bytes).into());
+    } else if n_bytes == 0 {
+        return Err("Data is not compressable.".into());
+    }
+    unsafe { dst.set_len(n_bytes as _) };
     Ok(dst)
 }
 
@@ -1298,6 +1349,7 @@ pub fn compress<T>(
 pub fn compress_into<T>(
     src: &[T],
     dst: &mut [u8],
+    typesize: Option<usize>,
     clevel: Option<CLevel>,
     filter: Option<Filter>,
     codec: Option<Codec>,
@@ -1305,7 +1357,7 @@ pub fn compress_into<T>(
     if src.is_empty() {
         return Ok(0);
     }
-    let typesize = mem::size_of::<T>();
+    let typesize = typesize.unwrap_or_else(|| mem::size_of::<T>());
     set_compressor(codec.unwrap_or_default())?;
     let n_bytes = unsafe {
         ffi::blosc2_compress(
@@ -1545,7 +1597,7 @@ mod tests {
     #[test]
     fn test_decompress_ctx() -> Result<()> {
         let input = b"some data";
-        let compressed = compress(input, None, None, None)?;
+        let compressed = compress(input, None, None, None, None)?;
         let decompressed = decompress_ctx(&compressed, &mut Context::from(DParams::default()))?;
         assert_eq!(input, decompressed.as_slice());
         Ok(())
@@ -1554,7 +1606,7 @@ mod tests {
     #[test]
     fn test_decompress_into_ctx() -> Result<()> {
         let input = b"some data";
-        let compressed = compress(input, None, None, None)?;
+        let compressed = compress(input, None, None, None, None)?;
         let mut decompressed = vec![0u8; input.len()];
         let n_bytes = decompress_into_ctx(
             &compressed,
@@ -1569,7 +1621,7 @@ mod tests {
     #[test]
     fn test_basic_roundtrip() -> Result<()> {
         let input = b"some data";
-        let compressed = compress(input, None, None, None)?;
+        let compressed = compress(input, None, None, None, None)?;
         let decompressed = decompress(&compressed)?;
         assert_eq!(input, decompressed.as_slice());
         Ok(())
@@ -1579,7 +1631,7 @@ mod tests {
     fn test_basic_roundtrip_into() -> Result<()> {
         let input = b"some data";
         let mut compressed = vec![0u8; 100];
-        let n_bytes = compress_into(input, &mut compressed, None, None, None)?;
+        let n_bytes = compress_into(input, &mut compressed, None, None, None, None)?;
 
         let mut decompressed = vec![0u8; input.len()];
         let n_out = decompress_into(&compressed[..n_bytes], &mut decompressed)?;

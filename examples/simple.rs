@@ -7,7 +7,7 @@ fn main() {
         .flat_map(|v| v.to_vec())
         .collect::<Vec<u8>>();
 
-    let compressed = compress(&data, None, None, None).unwrap();
+    let compressed = compress(&data, None, None, None, None).unwrap();
     let decompressed = decompress(&compressed).unwrap();
 
     assert_eq!(data, decompressed);

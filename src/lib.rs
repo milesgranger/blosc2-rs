@@ -170,7 +170,7 @@ impl From<i32> for Blosc2Error {
 pub const BUFSIZE: usize = 8196_usize;
 
 /// Possible Filters
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub enum Filter {
     NoFilter = ffi::BLOSC_NOFILTER as _,
     Shuffle = ffi::BLOSC_SHUFFLE as _,
@@ -187,6 +187,38 @@ impl Default for Filter {
     }
 }
 
+impl ToString for Filter {
+    fn to_string(&self) -> String {
+        match self {
+            Self::NoFilter => "nofilter",
+            Self::Shuffle => "shuffle",
+            Self::BitShuffle => "bitshuffle",
+            Self::Delta => "delta",
+            Self::TruncPrec => "truncprec",
+            Self::LastFilter => "lastfilter",
+            Self::LastRegisteredFilter => "lastregisteredfilter",
+        }
+        .to_string()
+    }
+}
+
+impl<'a> TryFrom<&'a str> for Filter {
+    type Error = Error;
+
+    fn try_from(val: &'a str) -> Result<Self> {
+        match val.to_lowercase().as_str() {
+            "nofilter" => Ok(Filter::NoFilter),
+            "shuffle" => Ok(Filter::Shuffle),
+            "bitshuffle" => Ok(Filter::BitShuffle),
+            "delta" => Ok(Filter::Delta),
+            "trunctprec" => Ok(Filter::TruncPrec),
+            "lastfilter" => Ok(Filter::LastFilter),
+            "lastregisteredfilter" => Ok(Filter::LastRegisteredFilter),
+            _ => Err(Error::from(format!("No matching filter for '{}'", val))),
+        }
+    }
+}
+
 /// Possible compression codecs
 #[derive(Debug, Copy, Clone)]
 pub enum Codec {
@@ -199,19 +231,27 @@ pub enum Codec {
     LastRegisteredCodec = ffi::BLOSC_LAST_REGISTERED_CODEC as _,
 }
 
-impl TryInto<String> for Codec {
-    type Error = Error;
-    fn try_into(self) -> Result<String> {
+impl Codec {
+    fn to_name(&self) -> Result<String> {
+        (*self).try_into()
+    }
+    fn to_name_cstring(&self) -> Result<CString> {
         let mut compname = std::ptr::null();
-        let rc = unsafe { ffi::blosc2_compcode_to_compname(self as _, &mut compname) };
+        let rc = unsafe { ffi::blosc2_compcode_to_compname(*self as _, &mut compname) };
         if rc == -1 {
             return Err(Error::Other(format!("Unsupported Codec {:?}", self)));
         }
-        unsafe {
-            CString::from_raw(compname as _)
-                .into_string()
-                .map_err(|e| Error::Other(e.to_string()))
-        }
+        unsafe { Ok(CStr::from_ptr(compname as _).to_owned()) }
+    }
+}
+
+impl TryInto<String> for Codec {
+    type Error = Error;
+    fn try_into(self) -> Result<String> {
+        self.clone()
+            .to_name_cstring()?
+            .into_string()
+            .map_err(|e| Error::Other(e.to_string()))
     }
 }
 impl<'a> TryFrom<&'a str> for Codec {
@@ -616,7 +656,7 @@ pub mod schunk {
         /// assert_eq!(chunk.len::<u8>().unwrap(), 4);
         /// ```
         #[inline]
-        pub fn compress<T>(
+        pub fn compress<T: 'static>(
             src: &[T],
             typesize: Option<usize>,
             clevel: Option<CLevel>,
@@ -1299,7 +1339,8 @@ pub fn compress_ctx<T>(src: &[T], ctx: &mut Context) -> Result<Vec<u8>> {
     if src.is_empty() {
         return Ok(vec![]);
     }
-    let mut dst = vec![0u8; max_compress_len(src)];
+    let mut dst =
+        vec![0u8; max_compress_len(src, ctx.get_cparams().ok().map(|c| c.get_typesize()))];
     let size = compress_into_ctx(src, &mut dst, ctx)?;
     if dst.len() > size {
         dst.truncate(size as _);
@@ -1332,12 +1373,17 @@ pub fn compress_into_ctx<T>(src: &[T], dst: &mut [u8], ctx: &mut Context) -> Res
 
 /// Return the max size a compressed buffer needs to be to hold `src`
 #[inline(always)]
-pub fn max_compress_len<T>(src: &[T]) -> usize {
-    (src.len() * mem::size_of::<T>()) + ffi::BLOSC2_MAX_OVERHEAD as usize
+pub fn max_compress_len<T>(src: &[T], typesize: Option<usize>) -> usize {
+    (src.len() * typesize.unwrap_or_else(|| mem::size_of::<T>()))
+        + ffi::BLOSC2_MAX_OVERHEAD as usize
+}
+
+pub fn max_compress_len_bytes(len_bytes: usize) -> usize {
+    len_bytes + ffi::BLOSC2_MAX_OVERHEAD as usize
 }
 
 #[inline]
-pub fn compress<T>(
+pub fn compress<T: 'static>(
     src: &[T],
     typesize: Option<usize>,
     clevel: Option<CLevel>,
@@ -1347,17 +1393,24 @@ pub fn compress<T>(
     if src.is_empty() {
         return Ok(vec![]);
     }
+    let mut dst = Vec::with_capacity(max_compress_len(src, typesize));
     let typesize = typesize.unwrap_or_else(|| mem::size_of::<T>());
     set_compressor(codec.unwrap_or_default())?;
 
-    let mut dst = Vec::with_capacity(max_compress_len(src));
+    // If input is bytes, but typesize is >1 then we use src len directly
+    // since blosc2_compress want's the length in bytes
+    let multiplier = (&src[0] as &dyn std::any::Any)
+        .downcast_ref::<u8>()
+        .map(|_| 1)
+        .unwrap_or(typesize);
+
     let n_bytes = unsafe {
         ffi::blosc2_compress(
             clevel.unwrap_or_default() as _,
             filter.unwrap_or_default() as _,
             typesize as _,
             src.as_ptr() as *const c_void,
-            (src.len() * mem::size_of::<T>()) as _,
+            (src.len() * multiplier) as _,
             dst.as_mut_ptr() as *mut c_void,
             dst.capacity() as _,
         )
@@ -1372,7 +1425,7 @@ pub fn compress<T>(
 }
 
 #[inline]
-pub fn compress_into<T>(
+pub fn compress_into<T: 'static>(
     src: &[T],
     dst: &mut [u8],
     typesize: Option<usize>,
@@ -1385,13 +1438,21 @@ pub fn compress_into<T>(
     }
     let typesize = typesize.unwrap_or_else(|| mem::size_of::<T>());
     set_compressor(codec.unwrap_or_default())?;
+
+    // If input is bytes, but typesize is >1 then we use src len directly
+    // since blosc2_compress want's the length in bytes
+    let multiplier = (&src[0] as &dyn std::any::Any)
+        .downcast_ref::<u8>()
+        .map(|_| 1)
+        .unwrap_or(typesize);
+
     let n_bytes = unsafe {
         ffi::blosc2_compress(
             clevel.unwrap_or_default() as _,
             filter.unwrap_or_default() as _,
             typesize as _,
             src.as_ptr() as *const c_void,
-            (src.len() * mem::size_of::<T>()) as _,
+            (src.len() * multiplier) as _,
             dst.as_mut_ptr() as *mut c_void,
             dst.len() as _,
         )
@@ -1514,11 +1575,8 @@ pub fn decompress_into<T>(src: &[u8], dst: &mut [T]) -> Result<usize> {
 
 #[inline]
 pub fn set_compressor(codec: Codec) -> Result<()> {
-    let codec = match codec {
-        Codec::BloscLz => CString::new("blosclz").unwrap(),
-        _ => unimplemented!("Only blosclz codec supported for now"),
-    };
-    let rc = unsafe { ffi::blosc1_set_compressor(codec.as_ptr()) };
+    let codec_name = codec.to_name_cstring()?;
+    let rc = unsafe { ffi::blosc1_set_compressor(codec_name.as_ptr()) };
     if rc < 0 {
         Err(Blosc2Error::from(rc).into())
     } else {

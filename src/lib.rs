@@ -333,6 +333,10 @@ pub mod schunk {
             self.0.cparams = &mut cparams.0;
             self
         }
+        /// Get compression parameters
+        pub fn get_cparams(&self) -> CParams {
+            CParams(unsafe { *self.0.cparams })
+        }
         /// Set decompression parameters
         pub fn set_dparams(mut self, dparams: &mut DParams) -> Self {
             self.0.dparams = &mut dparams.0;
@@ -676,7 +680,6 @@ pub mod schunk {
         pub fn new(storage: Storage) -> Self {
             let mut storage = storage;
             let schunk = unsafe { ffi::blosc2_schunk_new(&mut storage.0) };
-            unsafe { (*schunk).typesize = 1 };
             Self(schunk)
         }
 

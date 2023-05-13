@@ -270,6 +270,29 @@ impl Default for CLevel {
     }
 }
 
+impl TryFrom<usize> for CLevel {
+    type Error = Error;
+
+    fn try_from(val: usize) -> Result<Self> {
+        match val {
+            0 => Ok(CLevel::Zero),
+            1 => Ok(CLevel::One),
+            2 => Ok(CLevel::Two),
+            3 => Ok(CLevel::Three),
+            4 => Ok(CLevel::Four),
+            5 => Ok(CLevel::Five),
+            6 => Ok(CLevel::Six),
+            7 => Ok(CLevel::Seven),
+            8 => Ok(CLevel::Eight),
+            9 => Ok(CLevel::Nine),
+            _ => Err(Error::from(format!(
+                "Compression level must be 0-9, got {}",
+                val
+            ))),
+        }
+    }
+}
+
 pub mod schunk {
     //! `blosc2_schunk`,`blosc2_storage`, and `Chunk` APIs
 

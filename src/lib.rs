@@ -1556,6 +1556,9 @@ pub fn decompress<T>(src: &[u8]) -> Result<Vec<T>> {
 
 #[inline]
 pub fn decompress_into<T>(src: &[u8], dst: &mut [T]) -> Result<usize> {
+    if src.is_empty() {
+        return Ok(0);
+    }
     let info = CompressedBufferInfo::try_from(src)?;
     let n_bytes = unsafe {
         ffi::blosc2_decompress(

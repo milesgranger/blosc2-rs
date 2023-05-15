@@ -736,6 +736,7 @@ pub mod schunk {
     /// Wrapper to [blosc2_schunk]
     ///
     /// [blosc2_schunk]: blosc2_sys::blosc2_schunk
+    #[derive(Clone)]
     pub struct SChunk(pub(crate) *mut ffi::blosc2_schunk);
 
     // Loosely inspired by blosc2-python implementation
@@ -829,6 +830,12 @@ pub mod schunk {
             } else {
                 Ok(size as _)
             }
+        }
+
+        #[inline]
+        pub fn decompress_chunk_vec<T>(&mut self, nchunk: usize) -> Result<Vec<T>> {
+            let mut chunk = Chunk::from_schunk(self, nchunk)?;
+            chunk.decompress()
         }
 
         /// Fill a buffer from the schunk data, at a given offset.

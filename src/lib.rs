@@ -746,6 +746,22 @@ pub mod schunk {
             Self(schunk)
         }
 
+        pub fn copy(&self) -> Self {
+            let schunk = unsafe { ffi::blosc2_schunk_copy(self.0, (*self.0).storage) };
+            Self(schunk)
+        }
+
+        pub fn frame(&self) -> Result<&[u8]> {
+            unsafe {
+                if (*self.0).frame.is_null() {
+                    return Err(Error::from("schunk frame is null"));
+                }
+                let len = ffi::blosc2_schunk_frame_len(self.0) as usize;
+                let buf = std::slice::from_raw_parts((*self.0).frame as _, len);
+                Ok(buf)
+            }
+        }
+
         #[inline]
         pub(crate) fn inner(&self) -> &ffi::blosc2_schunk {
             unsafe { &(*self.0) }

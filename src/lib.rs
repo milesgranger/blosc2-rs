@@ -2,6 +2,7 @@
 
 use blosc2_sys as ffi;
 use std::ffi::{c_void, CStr, CString};
+use std::sync::Arc;
 use std::{io, mem};
 
 /// Result type used in this library
@@ -694,7 +695,7 @@ pub mod schunk {
             let mut needs_free: bool = false;
             let rc = unsafe {
                 ffi::blosc2_schunk_get_chunk(
-                    schunk.0,
+                    *schunk.0,
                     nchunk as _,
                     &mut chunk as _,
                     &mut needs_free,
@@ -737,41 +738,41 @@ pub mod schunk {
     ///
     /// [blosc2_schunk]: blosc2_sys::blosc2_schunk
     #[derive(Clone)]
-    pub struct SChunk(pub(crate) *mut ffi::blosc2_schunk);
+    pub struct SChunk(pub(crate) Arc<*mut ffi::blosc2_schunk>);
 
     // Loosely inspired by blosc2-python implementation
     impl SChunk {
         pub fn new(storage: Storage) -> Self {
             let mut storage = storage;
             let schunk = unsafe { ffi::blosc2_schunk_new(&mut storage.0) };
-            Self(schunk)
+            Self(Arc::new(schunk))
         }
 
         pub fn copy(&self) -> Self {
-            let schunk = unsafe { ffi::blosc2_schunk_copy(self.0, (*self.0).storage) };
-            Self(schunk)
+            let schunk = unsafe { ffi::blosc2_schunk_copy(*self.0, (**self.0).storage) };
+            Self(Arc::new(schunk))
         }
 
         pub fn frame(&self) -> Result<&[u8]> {
             unsafe {
-                if (*self.0).frame.is_null() {
+                if (**self.0).frame.is_null() {
                     return Err(Error::from("schunk frame is null"));
                 }
-                let len = ffi::blosc2_schunk_frame_len(self.0) as usize;
-                let buf = std::slice::from_raw_parts((*self.0).frame as _, len);
+                let len = ffi::blosc2_schunk_frame_len(*self.0) as usize;
+                let buf = std::slice::from_raw_parts((**self.0).frame as _, len);
                 Ok(buf)
             }
         }
 
         #[inline]
         pub(crate) fn inner(&self) -> &ffi::blosc2_schunk {
-            unsafe { &(*self.0) }
+            unsafe { &(**self.0) }
         }
 
         #[inline]
         #[allow(dead_code)]
         pub(crate) fn inner_mut(&mut self) -> &mut ffi::blosc2_schunk {
-            unsafe { &mut (*self.0) }
+            unsafe { &mut (**self.0) }
         }
 
         /// Append data to SChunk, returning new number of chunks
@@ -795,7 +796,7 @@ pub mod schunk {
         #[inline]
         pub fn append_buffer_unchecked<T>(&mut self, data: &[T]) -> Result<usize> {
             let n = unsafe {
-                ffi::blosc2_schunk_append_buffer(self.0, data.as_ptr() as _, data.len() as _)
+                ffi::blosc2_schunk_append_buffer(*self.0, data.as_ptr() as _, data.len() as _)
             };
             if n < 0 {
                 return Err(Blosc2Error::from(n as i32).into());
@@ -819,7 +820,7 @@ pub mod schunk {
 
             let ptr = dst.as_mut_ptr() as _;
             let size = unsafe {
-                ffi::blosc2_schunk_decompress_chunk(self.0, nchunk as _, ptr, info.nbytes as _)
+                ffi::blosc2_schunk_decompress_chunk(*self.0, nchunk as _, ptr, info.nbytes as _)
             };
 
             if size < 0 {
@@ -848,7 +849,7 @@ pub mod schunk {
             let nbytes = std::cmp::min(self.cbytes() - offset, buf.len());
             let rc = unsafe {
                 ffi::blosc2_schunk_get_slice_buffer(
-                    self.0,
+                    *self.0,
                     offset as _,
                     (offset + nbytes) as _,
                     buf.as_mut_ptr() as _,
@@ -864,7 +865,7 @@ pub mod schunk {
         pub fn into_vec(self) -> Result<Vec<u8>> {
             let mut needs_free = true;
             let mut ptr: *mut u8 = std::ptr::null_mut();
-            let len = unsafe { ffi::blosc2_schunk_to_buffer(self.0, &mut ptr, &mut needs_free) };
+            let len = unsafe { ffi::blosc2_schunk_to_buffer(*self.0, &mut ptr, &mut needs_free) };
             if len < 0 {
                 return Err(Blosc2Error::from(len as i32).into());
             }
@@ -891,7 +892,7 @@ pub mod schunk {
             // copy is false, schunk/blosc2 takes ownership, and set that it'll be responsible to free it
             mem::forget(buf);
             unsafe { ffi::blosc2_schunk_avoid_cframe_free(schunk, false) };
-            Ok(Self(schunk))
+            Ok(Self(Arc::new(schunk)))
         }
 
         /// Create a Schunk from a slice. The data _will not be copied_ but the slice used as the
@@ -904,7 +905,7 @@ pub mod schunk {
                 return Err("Failed to get schunk from buffer".into());
             }
             unsafe { ffi::blosc2_schunk_avoid_cframe_free(schunk, true) };
-            Ok(Self(schunk))
+            Ok(Self(Arc::new(schunk)))
         }
 
         // --- PROPERTIES ---
@@ -965,6 +966,15 @@ pub mod schunk {
         /// Returns under of elements in Schunk (nbytes / typesize)
         pub fn len(&self) -> usize {
             (self.inner().nbytes / self.inner().typesize as i64) as usize
+        }
+    }
+
+    impl Drop for SChunk {
+        fn drop(&mut self) {
+            // drop if this is the only reference to pointer
+            if Arc::strong_count(&self.0) == 1 && !(*self.0).is_null() {
+                unsafe { ffi::blosc2_schunk_free(*self.0) };
+            }
         }
     }
 

@@ -440,6 +440,9 @@ pub mod schunk {
         pub(crate) needs_free: bool,
     }
 
+    unsafe impl Sync for Chunk {}
+    unsafe impl Send for Chunk {}
+
     impl TryFrom<Vec<u8>> for Chunk {
         type Error = Error;
         #[inline]
@@ -486,7 +489,7 @@ pub mod schunk {
         pub fn into_vec(self) -> Result<Vec<u8>> {
             let info = self.info()?;
             let buf =
-                unsafe { Vec::from_raw_parts(*self.chunk.read(), info.cbytes(), info.cbytes()) };
+                unsafe { Vec::from_raw_parts(*self.chunk.write(), info.cbytes(), info.cbytes()) };
             if !self.needs_free {
                 return Ok(buf.clone());
             }
@@ -702,7 +705,7 @@ pub mod schunk {
             let mut needs_free: bool = false;
             let rc = unsafe {
                 ffi::blosc2_schunk_get_chunk(
-                    *schunk.0,
+                    *schunk.0.read(),
                     nchunk as _,
                     &mut chunk as _,
                     &mut needs_free,
@@ -754,41 +757,42 @@ pub mod schunk {
     ///
     /// [blosc2_schunk]: blosc2_sys::blosc2_schunk
     #[derive(Clone)]
-    pub struct SChunk(pub(crate) Arc<*mut ffi::blosc2_schunk>);
+    pub struct SChunk(pub(crate) Arc<RwLock<*mut ffi::blosc2_schunk>>);
 
     // Loosely inspired by blosc2-python implementation
     impl SChunk {
         pub fn new(storage: Storage) -> Self {
             let mut storage = storage;
             let schunk = unsafe { ffi::blosc2_schunk_new(&mut storage.0) };
-            Self(Arc::new(schunk))
+            Self(Arc::new(RwLock::new(schunk)))
         }
 
         pub fn copy(&self) -> Self {
-            let schunk = unsafe { ffi::blosc2_schunk_copy(*self.0, (**self.0).storage) };
-            Self(Arc::new(schunk))
+            let schunk =
+                unsafe { ffi::blosc2_schunk_copy(*self.0.read(), (**self.0.read()).storage) };
+            Self(Arc::new(RwLock::new(schunk)))
         }
 
         pub fn frame(&self) -> Result<&[u8]> {
             unsafe {
-                if (**self.0).frame.is_null() {
+                if (**self.0.read()).frame.is_null() {
                     return Err(Error::from("schunk frame is null"));
                 }
-                let len = ffi::blosc2_schunk_frame_len(*self.0) as usize;
-                let buf = std::slice::from_raw_parts((**self.0).frame as _, len);
+                let len = ffi::blosc2_schunk_frame_len(*self.0.read()) as usize;
+                let buf = std::slice::from_raw_parts((**self.0.read()).frame as _, len);
                 Ok(buf)
             }
         }
 
         #[inline]
         pub(crate) fn inner(&self) -> &ffi::blosc2_schunk {
-            unsafe { &(**self.0) }
+            unsafe { &(**self.0.read()) }
         }
 
         #[inline]
         #[allow(dead_code)]
         pub(crate) fn inner_mut(&mut self) -> &mut ffi::blosc2_schunk {
-            unsafe { &mut (**self.0) }
+            unsafe { &mut (**self.0.write()) }
         }
 
         /// Append data to SChunk, returning new number of chunks
@@ -804,7 +808,7 @@ pub mod schunk {
                 return Err(Error::Other(msg));
             }
             let nchunks = unsafe {
-                ffi::blosc2_schunk_append_buffer(*self.0, data.as_ptr() as _, nbytes as _)
+                ffi::blosc2_schunk_append_buffer(*self.0.read(), data.as_ptr() as _, nbytes as _)
             };
             if nchunks < 0 {
                 return Err(Blosc2Error::from(nchunks as i32).into());
@@ -828,7 +832,12 @@ pub mod schunk {
 
             let ptr = dst.as_mut_ptr() as _;
             let size = unsafe {
-                ffi::blosc2_schunk_decompress_chunk(*self.0, nchunk as _, ptr, info.nbytes as _)
+                ffi::blosc2_schunk_decompress_chunk(
+                    *self.0.read(),
+                    nchunk as _,
+                    ptr,
+                    info.nbytes as _,
+                )
             };
 
             if size < 0 {
@@ -865,7 +874,7 @@ pub mod schunk {
             let mut buf = vec![0u8; nbytes];
             let rc = unsafe {
                 ffi::blosc2_schunk_get_slice_buffer(
-                    *self.0,
+                    *self.0.read(),
                     start as _,
                     stop as _,
                     buf.as_mut_ptr() as _,
@@ -892,8 +901,8 @@ pub mod schunk {
             let mut needs_free = true;
             let mut ptr: *mut u8 = std::ptr::null_mut();
             let len = unsafe {
-                ffi::blosc2_schunk_avoid_cframe_free(*self.0, true);
-                ffi::blosc2_schunk_to_buffer(*self.0, &mut ptr, &mut needs_free)
+                ffi::blosc2_schunk_avoid_cframe_free(*self.0.write(), true);
+                ffi::blosc2_schunk_to_buffer(*self.0.read(), &mut ptr, &mut needs_free)
             };
             if len < 0 {
                 return Err(Blosc2Error::from(len as i32).into());
@@ -919,7 +928,7 @@ pub mod schunk {
             }
             unsafe { ffi::blosc2_schunk_avoid_cframe_free(schunk, false) };
             mem::forget(buf); // blosc2
-            Ok(Self(Arc::new(schunk)))
+            Ok(Self(Arc::new(RwLock::new(schunk))))
         }
 
         // --- PROPERTIES ---
@@ -986,8 +995,8 @@ pub mod schunk {
     impl Drop for SChunk {
         fn drop(&mut self) {
             // drop if this is the only reference to pointer
-            if Arc::strong_count(&self.0) == 1 && !(*self.0).is_null() {
-                unsafe { ffi::blosc2_schunk_free(*self.0) };
+            if Arc::strong_count(&self.0) == 1 && !(*self.0.read()).is_null() {
+                unsafe { ffi::blosc2_schunk_free(*self.0.write()) };
             }
         }
     }

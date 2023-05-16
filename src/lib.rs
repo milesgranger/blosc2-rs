@@ -433,8 +433,9 @@ pub mod schunk {
     /// let chunk = Chunk::from_schunk(&mut schunk, 0).unwrap();  // Get first (and only) chunk
     /// assert_eq!(chunk.info().unwrap().nbytes() as usize, input.len());
     /// ```
+    #[derive(Clone)]
     pub struct Chunk {
-        pub(crate) chunk: *mut u8,
+        pub(crate) chunk: Arc<*mut u8>,
         pub(crate) needs_free: bool,
     }
 
@@ -450,7 +451,10 @@ pub mod schunk {
         /// Create a new `Chunk` directly from a pointer, you probably
         /// want `Chunk::from_schunk` instead.
         pub fn new(chunk: *mut u8, needs_free: bool) -> Self {
-            Self { chunk, needs_free }
+            Self {
+                chunk: Arc::new(chunk),
+                needs_free,
+            }
         }
 
         /// Construct Chunk from vector of bytes, this Vec is assumed to be the result of a valid
@@ -480,7 +484,7 @@ pub mod schunk {
         /// Maybe clone underlying vec if it's managed by blosc2
         pub fn into_vec(self) -> Result<Vec<u8>> {
             let info = self.info()?;
-            let buf = unsafe { Vec::from_raw_parts(self.chunk, info.cbytes(), info.cbytes()) };
+            let buf = unsafe { Vec::from_raw_parts(*self.chunk, info.cbytes(), info.cbytes()) };
             if !self.needs_free {
                 return Ok(buf.clone());
             }
@@ -489,8 +493,8 @@ pub mod schunk {
 
         /// Get the raw buffer of this chunk
         pub fn as_slice(&self) -> Result<&[u8]> {
-            let info = CompressedBufferInfo::try_from(self.chunk as *const c_void)?;
-            let slice = unsafe { std::slice::from_raw_parts(self.chunk, info.cbytes()) };
+            let info = CompressedBufferInfo::try_from(*self.chunk as *const c_void)?;
+            let slice = unsafe { std::slice::from_raw_parts(*self.chunk, info.cbytes()) };
             Ok(slice)
         }
 
@@ -509,7 +513,7 @@ pub mod schunk {
         /// ```
         #[inline]
         pub fn len<T>(&self) -> Result<usize> {
-            CompressedBufferInfo::try_from(self.chunk as *const c_void)
+            CompressedBufferInfo::try_from(*self.chunk as *const c_void)
                 .map(|info| info.nbytes() / mem::size_of::<T>())
         }
 
@@ -684,7 +688,7 @@ pub mod schunk {
         /// assert_eq!(decompressed, vec![0i64; 5]);
         /// ```
         pub fn decompress<T>(&mut self) -> Result<Vec<T>> {
-            let slice = unsafe { std::slice::from_raw_parts(self.chunk, self.info()?.cbytes) };
+            let slice = unsafe { std::slice::from_raw_parts(*self.chunk, self.info()?.cbytes) };
             crate::decompress(slice)
         }
 
@@ -704,7 +708,10 @@ pub mod schunk {
             if rc < 0 {
                 return Err(Error::Blosc2(Blosc2Error::from(rc as i32)));
             }
-            Ok(Self { chunk, needs_free })
+            Ok(Self {
+                chunk: Arc::new(chunk),
+                needs_free,
+            })
         }
         /// Get `CompressedBufferInfo` for this chunk.
         #[inline]
@@ -713,7 +720,12 @@ pub mod schunk {
             let mut cbytes = 0;
             let mut blocksize = 0;
             let rc = unsafe {
-                ffi::blosc2_cbuffer_sizes(self.chunk as _, &mut nbytes, &mut cbytes, &mut blocksize)
+                ffi::blosc2_cbuffer_sizes(
+                    *self.chunk as _,
+                    &mut nbytes,
+                    &mut cbytes,
+                    &mut blocksize,
+                )
             };
             if rc < 0 {
                 return Err(Blosc2Error::from(rc).into());
@@ -728,8 +740,9 @@ pub mod schunk {
 
     impl Drop for Chunk {
         fn drop(&mut self) {
-            if self.needs_free {
-                unsafe { ffi::free(self.chunk as _) };
+            // drop if needs freed and this is last strong ref
+            if self.needs_free && Arc::strong_count(&self.chunk) == 1 {
+                unsafe { ffi::free(*self.chunk as _) };
             }
         }
     }
@@ -865,7 +878,10 @@ pub mod schunk {
         pub fn into_vec(self) -> Result<Vec<u8>> {
             let mut needs_free = true;
             let mut ptr: *mut u8 = std::ptr::null_mut();
-            let len = unsafe { ffi::blosc2_schunk_to_buffer(*self.0, &mut ptr, &mut needs_free) };
+            let len = unsafe {
+                ffi::blosc2_schunk_avoid_cframe_free(*self.0, true);
+                ffi::blosc2_schunk_to_buffer(*self.0, &mut ptr, &mut needs_free)
+            };
             if len < 0 {
                 return Err(Blosc2Error::from(len as i32).into());
             }
@@ -888,23 +904,8 @@ pub mod schunk {
                     "Failed to get schunk from buffer; might not be valid buffer for schunk",
                 ));
             }
-
-            // copy is false, schunk/blosc2 takes ownership, and set that it'll be responsible to free it
-            mem::forget(buf);
             unsafe { ffi::blosc2_schunk_avoid_cframe_free(schunk, false) };
-            Ok(Self(Arc::new(schunk)))
-        }
-
-        /// Create a Schunk from a slice. The data _will not be copied_ but the slice used as the
-        /// underlying schunk cframe.
-        pub fn from_slice(buf: &mut [u8]) -> Result<Self> {
-            // schunk is a view of the slice, so copy is false and set to avoid freeing the buffer
-            let schunk =
-                unsafe { ffi::blosc2_schunk_from_buffer(buf.as_mut_ptr(), buf.len() as _, false) };
-            if schunk.is_null() {
-                return Err("Failed to get schunk from buffer".into());
-            }
-            unsafe { ffi::blosc2_schunk_avoid_cframe_free(schunk, true) };
+            mem::forget(buf); // blosc2
             Ok(Self(Arc::new(schunk)))
         }
 
@@ -1780,14 +1781,14 @@ mod tests {
         schunk.decompress_chunk(n - 1, &mut decompressed)?;
         assert_eq!(input, decompressed.as_slice());
 
-        // Reconstruct thru slice
-        let mut v = schunk.into_vec()?;
         {
-            schunk = schunk::SChunk::from_slice(&mut v)?;
-            assert_eq!(schunk.n_chunks(), 1);
+            // ensure clone then drop doesn't free the schunk ptr, original still needs is
+            let _cloned = schunk.clone();
         }
+        assert_eq!(schunk.n_chunks(), 1);
 
         // Reconstruct thru vec
+        let v = schunk.into_vec()?;
         schunk = schunk::SChunk::from_vec(v)?;
         assert_eq!(schunk.n_chunks(), 1);
 

@@ -719,6 +719,17 @@ pub mod schunk {
                 needs_free,
             })
         }
+
+        /// Uncompressed bytes in this Chunk
+        pub fn nbytes(&self) -> Result<usize> {
+            self.info().map(|info| info.nbytes)
+        }
+
+        /// Compressed bytes in this Chunk
+        pub fn cbytes(&self) -> Result<usize> {
+            self.info().map(|info| info.cbytes)
+        }
+
         /// Get `CompressedBufferInfo` for this chunk.
         #[inline]
         pub fn info(&self) -> Result<CompressedBufferInfo> {
@@ -894,6 +905,24 @@ pub mod schunk {
             }
             let buf = self.get_slice_buffer(start, stop)?;
             Ok(unsafe { mem::transmute(buf) })
+        }
+
+        pub fn get_chunk(&self, nchunk: usize) -> Result<Chunk> {
+            let mut needs_free = true;
+            let mut chunk = std::ptr::null_mut();
+            let nbytes = unsafe {
+                ffi::blosc2_schunk_get_chunk(
+                    *self.0.read(),
+                    nchunk as _,
+                    &mut chunk as _,
+                    &mut needs_free,
+                )
+            };
+            if nbytes < 0 {
+                Err(Blosc2Error::from(nbytes).into())
+            } else {
+                Ok(Chunk::new(chunk, needs_free))
+            }
         }
 
         /// Export this `SChunk` into a buffer

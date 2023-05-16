@@ -1,6 +1,7 @@
 //! Blosc2 Rust bindings.
 
 use blosc2_sys as ffi;
+use parking_lot::RwLock;
 use std::ffi::{c_void, CStr, CString};
 use std::sync::Arc;
 use std::{io, mem};
@@ -435,7 +436,7 @@ pub mod schunk {
     /// ```
     #[derive(Clone)]
     pub struct Chunk {
-        pub(crate) chunk: Arc<*mut u8>,
+        pub(crate) chunk: Arc<RwLock<*mut u8>>,
         pub(crate) needs_free: bool,
     }
 
@@ -452,7 +453,7 @@ pub mod schunk {
         /// want `Chunk::from_schunk` instead.
         pub fn new(chunk: *mut u8, needs_free: bool) -> Self {
             Self {
-                chunk: Arc::new(chunk),
+                chunk: Arc::new(RwLock::new(chunk)),
                 needs_free,
             }
         }
@@ -484,7 +485,8 @@ pub mod schunk {
         /// Maybe clone underlying vec if it's managed by blosc2
         pub fn into_vec(self) -> Result<Vec<u8>> {
             let info = self.info()?;
-            let buf = unsafe { Vec::from_raw_parts(*self.chunk, info.cbytes(), info.cbytes()) };
+            let buf =
+                unsafe { Vec::from_raw_parts(*self.chunk.read(), info.cbytes(), info.cbytes()) };
             if !self.needs_free {
                 return Ok(buf.clone());
             }
@@ -493,8 +495,8 @@ pub mod schunk {
 
         /// Get the raw buffer of this chunk
         pub fn as_slice(&self) -> Result<&[u8]> {
-            let info = CompressedBufferInfo::try_from(*self.chunk as *const c_void)?;
-            let slice = unsafe { std::slice::from_raw_parts(*self.chunk, info.cbytes()) };
+            let info = CompressedBufferInfo::try_from(*self.chunk.read() as *const c_void)?;
+            let slice = unsafe { std::slice::from_raw_parts(*self.chunk.read(), info.cbytes()) };
             Ok(slice)
         }
 
@@ -513,7 +515,7 @@ pub mod schunk {
         /// ```
         #[inline]
         pub fn len<T>(&self) -> Result<usize> {
-            CompressedBufferInfo::try_from(*self.chunk as *const c_void)
+            CompressedBufferInfo::try_from(*self.chunk.read() as *const c_void)
                 .map(|info| info.nbytes() / mem::size_of::<T>())
         }
 
@@ -687,8 +689,9 @@ pub mod schunk {
         /// dbg!(decompressed.len());
         /// assert_eq!(decompressed, vec![0i64; 5]);
         /// ```
-        pub fn decompress<T>(&mut self) -> Result<Vec<T>> {
-            let slice = unsafe { std::slice::from_raw_parts(*self.chunk, self.info()?.cbytes) };
+        pub fn decompress<T>(&self) -> Result<Vec<T>> {
+            let slice =
+                unsafe { std::slice::from_raw_parts(*self.chunk.read(), self.info()?.cbytes) };
             crate::decompress(slice)
         }
 
@@ -709,7 +712,7 @@ pub mod schunk {
                 return Err(Error::Blosc2(Blosc2Error::from(rc as i32)));
             }
             Ok(Self {
-                chunk: Arc::new(chunk),
+                chunk: Arc::new(RwLock::new(chunk)),
                 needs_free,
             })
         }
@@ -721,7 +724,7 @@ pub mod schunk {
             let mut blocksize = 0;
             let rc = unsafe {
                 ffi::blosc2_cbuffer_sizes(
-                    *self.chunk as _,
+                    *self.chunk.read() as _,
                     &mut nbytes,
                     &mut cbytes,
                     &mut blocksize,
@@ -742,7 +745,7 @@ pub mod schunk {
         fn drop(&mut self) {
             // drop if needs freed and this is last strong ref
             if self.needs_free && Arc::strong_count(&self.chunk) == 1 {
-                unsafe { ffi::free(*self.chunk as _) };
+                unsafe { ffi::free(*self.chunk.write() as _) };
             }
         }
     }

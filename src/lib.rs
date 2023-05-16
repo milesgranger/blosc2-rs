@@ -794,27 +794,19 @@ pub mod schunk {
             if data.is_empty() {
                 return Ok(self.inner().nchunks as usize);
             }
-
-            let size = mem::size_of::<T>();
-            let typesize = self.inner().typesize as _;
-            if size != typesize {
-                let msg = format!("Size of T ({}) != schunk typesize ({})", size, typesize);
+            let nbytes = mem::size_of::<T>() * data.len();
+            let typesize = self.typesize();
+            if nbytes % self.typesize() != 0 {
+                let msg = format!("Buffer ({nbytes}) not evenly divisible by typesize: {typesize}");
                 return Err(Error::Other(msg));
             }
-            self.append_buffer_unchecked(data)
-        }
-
-        /// Same as `append_buffer` but will not do any preliminary checks for matching typesize
-        /// or if input buffer is empty.
-        #[inline]
-        pub fn append_buffer_unchecked<T>(&mut self, data: &[T]) -> Result<usize> {
-            let n = unsafe {
-                ffi::blosc2_schunk_append_buffer(*self.0, data.as_ptr() as _, data.len() as _)
+            let nchunks = unsafe {
+                ffi::blosc2_schunk_append_buffer(*self.0, data.as_ptr() as _, nbytes as _)
             };
-            if n < 0 {
-                return Err(Blosc2Error::from(n as i32).into());
+            if nchunks < 0 {
+                return Err(Blosc2Error::from(nchunks as i32).into());
             }
-            Ok(n as _)
+            Ok(nchunks as _)
         }
 
         /// Decompress a chunk, returning number of bytes written to output buffer
@@ -852,26 +844,44 @@ pub mod schunk {
             chunk.decompress()
         }
 
-        /// Fill a buffer from the schunk data, at a given offset.
-        /// Return number of bytes copied into buffer, can be less if size with offset goes
-        /// beyond schunk bytes, this will be the uncompressed data
-        pub fn get_slice_buffer(&self, offset: usize, buf: &mut [u8]) -> Result<usize> {
-            if offset >= self.cbytes() {
-                return Err(Error::from("Out of bounds"));
+        /// Get uncompressed slice of data from start until stop. Returned as bytes, which
+        /// can be transmuted/casted into the concrete item type.
+        /// start/stop is by items, not by bytes
+        pub fn get_slice_buffer(&self, start: usize, stop: usize) -> Result<Vec<u8>> {
+            if stop > self.len() {
+                return Err(Error::from(format!(
+                    "Out of bounds. `stop`={}, is more than length={}",
+                    stop,
+                    self.len()
+                )));
             }
-            let nbytes = std::cmp::min(self.cbytes() - offset, buf.len());
+            if stop <= start {
+                return Err(Error::from("start must be less than stop"));
+            }
+            let nbytes = (stop - start) * self.typesize();
+            let mut buf = vec![0u8; nbytes];
             let rc = unsafe {
                 ffi::blosc2_schunk_get_slice_buffer(
                     *self.0,
-                    offset as _,
-                    (offset + nbytes) as _,
+                    start as _,
+                    stop as _,
                     buf.as_mut_ptr() as _,
                 )
             };
             if rc != 0 {
                 return Err(Blosc2Error::from(rc).into());
             }
-            Ok(nbytes)
+            Ok(buf)
+        }
+
+        /// Convenience method to `get_slice_buffer` which will transmute resulting bytes buffer into `Vec<T>` for you.
+        /// **NB** This will check T is same size as schunk's typesize so is _fairly_ safe.
+        pub fn get_slice_buffer_as_type<T>(&self, start: usize, stop: usize) -> Result<Vec<T>> {
+            if mem::size_of::<T>() != self.typesize() {
+                return Err(Error::from("Size of T does not match schunk typesize"));
+            }
+            let buf = self.get_slice_buffer(start, stop)?;
+            Ok(unsafe { mem::transmute(buf) })
         }
 
         /// Export this `SChunk` into a buffer

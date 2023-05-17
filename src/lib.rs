@@ -863,8 +863,38 @@ pub mod schunk {
 
         #[inline]
         pub fn decompress_chunk_vec<T>(&mut self, nchunk: usize) -> Result<Vec<T>> {
-            let mut chunk = Chunk::from_schunk(self, nchunk)?;
+            let chunk = Chunk::from_schunk(self, nchunk)?;
             chunk.decompress()
+        }
+
+        /// Set slice buffer
+        pub fn set_slice_buffer(&self, start: usize, stop: usize, buf: &[u8]) -> Result<()> {
+            if stop > self.len() {
+                return Err(Error::from(format!(
+                    "`stop`: {} must be less than len: {}",
+                    stop,
+                    self.len(),
+                )));
+            }
+
+            if buf.len() % self.typesize() != 0 {
+                return Err(Error::from(
+                    "Buffer is not evenly divisible by SChunk typesize",
+                ));
+            }
+
+            let rc = unsafe {
+                ffi::blosc2_schunk_set_slice_buffer(
+                    *self.0.write(),
+                    start as _,
+                    stop as _,
+                    buf.as_ptr() as *const _ as *mut _,
+                )
+            };
+            if rc != 0 {
+                return Err(Blosc2Error::from(rc).into());
+            }
+            Ok(())
         }
 
         /// Get uncompressed slice of data from start until stop. Returned as bytes, which

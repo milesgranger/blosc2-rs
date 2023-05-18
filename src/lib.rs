@@ -957,12 +957,13 @@ pub mod schunk {
 
         /// Export this `SChunk` into a buffer
         pub fn into_vec(self) -> Result<Vec<u8>> {
+            if self.is_empty() {
+                return Ok(vec![]);
+            }
             let mut needs_free = true;
             let mut ptr: *mut u8 = std::ptr::null_mut();
-            let len = unsafe {
-                ffi::blosc2_schunk_avoid_cframe_free(*self.0.write(), true);
-                ffi::blosc2_schunk_to_buffer(*self.0.read(), &mut ptr, &mut needs_free)
-            };
+            let len =
+                unsafe { ffi::blosc2_schunk_to_buffer(*self.0.read(), &mut ptr, &mut needs_free) };
             if len < 0 {
                 return Err(Blosc2Error::from(len as i32).into());
             }
@@ -985,7 +986,7 @@ pub mod schunk {
                     "Failed to get schunk from buffer; might not be valid buffer for schunk",
                 ));
             }
-            unsafe { ffi::blosc2_schunk_avoid_cframe_free(schunk, false) };
+            unsafe { ffi::blosc2_schunk_avoid_cframe_free(schunk, true) };
             mem::forget(buf); // blosc2
             Ok(Self(Arc::new(RwLock::new(schunk))))
         }
@@ -1048,6 +1049,10 @@ pub mod schunk {
         /// Returns under of elements in Schunk (nbytes / typesize)
         pub fn len(&self) -> usize {
             (self.inner().nbytes / self.inner().typesize as i64) as usize
+        }
+
+        pub fn is_empty(&self) -> bool {
+            self.len() == 0
         }
     }
 

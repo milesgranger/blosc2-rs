@@ -1,6 +1,6 @@
 [package]
 name = "blosc2-rs"
-version = "0.1.0"
+version = "0.1.0+2.8.0"
 edition = "2021"
 
 [lib]
@@ -10,6 +10,7 @@ name = "blosc2"
 
 [dependencies]
 blosc2-sys = { path = "blosc2-sys" }
+parking_lot = "^0.12"
 
 [dev-dependencies]
 ctor = "0.2.0"

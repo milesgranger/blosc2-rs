@@ -11,49 +11,24 @@ on:
       - prereleased
 
 jobs:
-  macos:
-    runs-on: macos-latest
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    matrix:
+      os:
+        - macos-latest
+        - windows-latest
+        - ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-file: environment.yml
+          enviornment-name: blosc2
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Build
-        run: cargo build
+        run: cargo build --features use-system-blosc2
       - name: Test
-        run: cargo test -- --test-threads 1
-
-  windows:
-    runs-on: windows-latest
-    # TODO: https://github.com/rust-lang/rust-bindgen/issues/2179
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: "x86_64-pc-windows-gnu"
-      - name: Set up MinGW
-        uses: egor-tensin/setup-mingw@v2
-        with:
-          platform: x64
-      - name: Build
-        run: cargo build --target x86_64-pc-windows-gnu
-      - name: Test
-        run: cargo test --target x86_64-pc-windows-gnu
-
-  linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      - name: Build
-        run: cargo build
-      - name: Test
-        run: cargo test
+        run: cargo test --features use-system-blosc2

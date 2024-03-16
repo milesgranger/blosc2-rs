@@ -1,0 +1,6 @@
+name: blosc2
+channels:
+  - conda-forge
+dependencies:
+  - pkg-config
+  - c-blosc2 ==2.13.2

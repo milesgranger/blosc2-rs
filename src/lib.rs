@@ -273,7 +273,7 @@ impl TryFrom<i32> for Codec {
     type Error = Error;
 
     fn try_from(compcode: i32) -> Result<Self> {
-        match compcode as u32 {
+        match compcode as _ {
             ffi::BLOSC_BLOSCLZ => Ok(Codec::BloscLz),
             ffi::BLOSC_LZ4 => Ok(Codec::LZ4),
             ffi::BLOSC_LZ4HC => Ok(Codec::LZ4HC),

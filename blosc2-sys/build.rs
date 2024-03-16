@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+#[cfg(feature = "use-system-blosc2")]
 const BLOSC2_VERSION: &'static str = "2.13.2";
 
 fn main() {
@@ -9,14 +10,15 @@ fn main() {
         {
             let lib = cmake::Config::new("c-blosc2")
                 .define("CMAKE_POSITION_INDEPENDENT_CODE", "ON")
-                .define("CMAKE_C_FLAGS", "-Ofast")
                 .define("STATIC_LIB", "ON")
-                .define("SHARED_LIB", "ON")
+                .define("SHARED_LIB", "OFF")
                 .define("BLOSC_INSTALL", "ON")
                 .define("BUILD_TESTS", "OFF")
                 .define("BUILD_EXAMPLES", "OFF")
+                .define("BUILD_SHARED_LIBS", "OFF")
                 .define("BUILD_BENCHMARKS", "OFF")
                 .define("BUILD_FUZZERS", "OFF")
+                .define("BUILD_PLUGINS", "OFF")
                 .always_configure(true)
                 .build();
 

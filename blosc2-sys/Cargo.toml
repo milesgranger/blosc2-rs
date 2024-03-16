@@ -1,6 +1,6 @@
 [package]
 name = "blosc2-sys"
-version = "0.1.0+2.8.0"
+version = "0.2.0+2.13.2"
 edition = "2021"
 links = "blosc2"
 
@@ -8,6 +8,11 @@ links = "blosc2"
 
 [dependencies]
 
+[features]
+defaults = []
+use-system-blosc2 = []
+
 [build-dependencies]
 cmake = "^0.1"
 bindgen = "^0.64"
+pkg-config = "^0.3"

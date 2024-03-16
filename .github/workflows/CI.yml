@@ -11,49 +11,62 @@ on:
       - prereleased
 
 jobs:
-  macos:
-    runs-on: macos-latest
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-14
+          - windows-latest
+          - ubuntu-latest
+        flags:
+          - --features use-system-blosc2
+          - ''
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: 3.12
+          mamba-version: "*"
+          channels: conda-forge,defaults
+          channel-priority: true
+          activate-environment: blosc2
+          environment-file: environment.yml
+      - shell: bash -el {0}
+        run: |
+          conda info
+          conda list
+          conda config --show-sources
+          conda config --show
+          printenv | sort
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-      - name: Build
-        run: cargo build
-      - name: Test
-        run: cargo test -- --test-threads 1
 
-  windows:
-    runs-on: windows-latest
-    # TODO: https://github.com/rust-lang/rust-bindgen/issues/2179
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: "x86_64-pc-windows-gnu"
-      - name: Set up MinGW
-        uses: egor-tensin/setup-mingw@v2
-        with:
-          platform: x64
-      - name: Build
-        run: cargo build --target x86_64-pc-windows-gnu
-      - name: Test
-        run: cargo test --target x86_64-pc-windows-gnu
+      - name: Install packages (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
 
-  linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install packages (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja
+
+      - name: Install packages (Ubuntu)
+        if: runner.os == 'Linux'
+        shell: bash -el {0}
+        run: conda install clang -y
+
       - name: Build
-        run: cargo build
+        shell: bash -el {0}
+        run: cargo build ${{ matrix.flags }}
       - name: Test
+        # Running tests using shared library is ugly since conda doesn't
+        # update LD_LIBRARY_PATH type env vars, so would manually need to 
+        # set the library to a currently discoverable place or update these
+        # env vars for each platform. Won't automatically locate the blosc2 
+        # shared library within the conda environment.
+        if: ${{ matrix.flags == '' }}
+        shell: bash -el {0}
         run: cargo test

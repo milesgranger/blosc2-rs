@@ -234,6 +234,7 @@ pub enum Codec {
 }
 
 impl Codec {
+    #[allow(dead_code)]
     fn to_name(&self) -> Result<String> {
         (*self).try_into()
     }
@@ -272,7 +273,7 @@ impl TryFrom<i32> for Codec {
     type Error = Error;
 
     fn try_from(compcode: i32) -> Result<Self> {
-        match compcode as u32 {
+        match compcode as _ {
             ffi::BLOSC_BLOSCLZ => Ok(Codec::BloscLz),
             ffi::BLOSC_LZ4 => Ok(Codec::LZ4),
             ffi::BLOSC_LZ4HC => Ok(Codec::LZ4HC),
@@ -1916,14 +1917,14 @@ mod tests {
     #[test]
     fn test_get_version_string() -> Result<()> {
         let version = get_version_string()?;
-        assert_eq!(&version, "2.8.0");
+        assert_eq!(&version, "2.13.2");
         Ok(())
     }
 
     #[test]
     fn test_get_complib_version_string() -> Result<()> {
         let info = get_complib_info(Codec::BloscLz)?;
-        assert_eq!(&info, "BloscLZ: 2.5.2");
+        assert_eq!(&info, "BloscLZ: 2.5.3");
         Ok(())
     }
 }

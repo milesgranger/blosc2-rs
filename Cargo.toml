@@ -1,6 +1,8 @@
 [package]
 name = "blosc2-rs"
 version = "0.2.0+2.13.2"
+description = "Blosc2"
+license = "MIT"
 edition = "2021"
 
 [lib]
@@ -12,13 +14,13 @@ defaults = []
 use-system-blosc2 = ["blosc2-sys/use-system-blosc2"]
 
 [dependencies]
-blosc2-sys = { path = "blosc2-sys" }
+blosc2-sys = { path = "blosc2-sys", version = "0.2.0+2.13.2" }
 parking_lot = "^0.12"
 
 [dev-dependencies]
 ctor = "0.2.0"
 criterion = { version = "0.4", features = ["html_reports"] }
-rand = "*"
+rand = "0.8.5"
 
 [[bench]]
 name = "benchmarks"

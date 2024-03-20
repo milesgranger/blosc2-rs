@@ -2,6 +2,8 @@
 name = "blosc2-sys"
 version = "0.2.0+2.13.2"
 edition = "2021"
+description = "Bindings to C Blosc2"
+license = "MIT"
 links = "blosc2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

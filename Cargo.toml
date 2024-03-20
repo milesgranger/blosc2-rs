@@ -1,6 +1,6 @@
 [package]
 name = "blosc2-rs"
-version = "0.2.1+2.13.2"
+version = "0.2.2+2.13.2"
 description = "Blosc2"
 license = "MIT"
 edition = "2021"

@@ -962,6 +962,8 @@ pub mod schunk {
                 return Ok(vec![]);
             }
 
+            unsafe { ffi::blosc2_schunk_avoid_cframe_free(*self.0.read(), true) };
+
             let mut needs_free = true;
             let mut ptr: *mut u8 = std::ptr::null_mut();
             let len =

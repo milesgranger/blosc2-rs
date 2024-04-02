@@ -17,10 +17,10 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - macos-14
+          - macos-13  # x86_64
+          - macos-14  # M1
           - windows-latest
           - ubuntu-latest
-          - macos-latest
         flags:
           - --features use-system-blosc2
           - ''

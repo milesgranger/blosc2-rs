@@ -32,6 +32,7 @@ jobs:
         with:
           python-version: 3.12
           mamba-version: "*"
+          miniforge-version: "latest"
           channels: conda-forge,defaults
           channel-priority: true
           activate-environment: blosc2

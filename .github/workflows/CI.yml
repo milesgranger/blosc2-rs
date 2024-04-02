@@ -64,6 +64,8 @@ jobs:
         shell: bash -el {0}
         run: conda install clang -y
 
+      - uses: rui314/setup-mold@v1
+
       - name: Build
         shell: bash -el {0}
         run: cargo build ${{ matrix.flags }}
@@ -75,6 +77,4 @@ jobs:
         # shared library within the conda environment.
         if: ${{ matrix.flags == '' }}
         shell: bash -el {0}
-        run: |
-          cargo clean
-          cargo test
+        run: cargo test

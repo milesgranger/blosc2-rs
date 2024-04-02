@@ -9,8 +9,8 @@ fn main() {
         #[cfg(not(feature = "use-system-blosc2"))]
         {
             let lib = cmake::Config::new("c-blosc2")
-                // .define("STATIC_LIB", "OFF")
-                // .define("SHARED_LIB", "ON")
+                .define("STATIC_LIB", "ON")
+                .define("SHARED_LIB", "OFF")
                 .define("BUILD_TESTS", "OFF")
                 .define("BUILD_EXAMPLES", "OFF")
                 .define("BUILD_SHARED_LIBS", "OFF")

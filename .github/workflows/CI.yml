@@ -75,4 +75,6 @@ jobs:
         # shared library within the conda environment.
         if: ${{ matrix.flags == '' }}
         shell: bash -el {0}
-        run: cargo test
+        run: |
+          cargo clean
+          cargo test

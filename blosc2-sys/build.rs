@@ -9,7 +9,6 @@ fn main() {
         #[cfg(not(feature = "use-system-blosc2"))]
         {
             let lib = cmake::Config::new("c-blosc2")
-                .define("CMAKE_POSITION_INDEPENDENT_CODE", "ON")
                 .define("STATIC_LIB", "ON")
                 .define("SHARED_LIB", "OFF")
                 .define("BLOSC_INSTALL", "ON")

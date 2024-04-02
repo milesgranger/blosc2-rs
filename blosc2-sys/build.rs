@@ -9,8 +9,8 @@ fn main() {
         #[cfg(not(feature = "use-system-blosc2"))]
         {
             let lib = cmake::Config::new("c-blosc2")
-                .define("STATIC_LIB", "ON")
-                .define("SHARED_LIB", "OFF")
+                // .define("STATIC_LIB", "OFF")
+                // .define("SHARED_LIB", "ON")
                 .define("BUILD_TESTS", "OFF")
                 .define("BUILD_EXAMPLES", "OFF")
                 .define("BUILD_SHARED_LIBS", "OFF")
@@ -23,7 +23,7 @@ fn main() {
 
             println!("cargo:rustc-link-search={}/lib64", lib.display());
             println!("cargo:rustc-link-search={}/lib", lib.display());
-            println!("cargo:rustc-link-lib=static=blosc2");
+            println!("cargo:rustc-link-lib=blosc2");
             format!("{}/include/blosc2.h", lib.display())
         }
 

@@ -50,6 +50,9 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install ninja
 
+      - name: Set OSX deployment target
+        run: echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
+
       - name: Install packages (Windows)
         if: runner.os == 'Windows'
         run: choco install ninja

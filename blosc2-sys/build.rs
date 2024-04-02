@@ -11,14 +11,13 @@ fn main() {
             let lib = cmake::Config::new("c-blosc2")
                 .define("STATIC_LIB", "ON")
                 .define("SHARED_LIB", "OFF")
-                // .define("BLOSC_INSTALL", "ON")
                 .define("BUILD_TESTS", "OFF")
                 .define("BUILD_EXAMPLES", "OFF")
                 .define("BUILD_SHARED_LIBS", "OFF")
                 .define("BUILD_BENCHMARKS", "OFF")
                 .define("BUILD_FUZZERS", "OFF")
-                // .define("BUILD_PLUGINS", "OFF")
-                // .always_configure(true)
+                .define("BUILD_PLUGINS", "OFF")
+                .always_configure(true)
                 .build();
 
             println!("cargo:rustc-link-search={}/lib64", lib.display());

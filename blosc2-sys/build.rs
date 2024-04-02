@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 #[cfg(feature = "use-system-blosc2")]
-const BLOSC2_VERSION: &'static str = "2.13.2";
+const BLOSC2_VERSION: &'static str = "2.14.0";
 
 fn main() {
     let header = {
@@ -23,7 +23,7 @@ fn main() {
 
             println!("cargo:rustc-link-search={}/lib64", lib.display());
             println!("cargo:rustc-link-search={}/lib", lib.display());
-            println!("cargo:rustc-link-lib=static=blosc2");
+            println!("cargo:rustc-link-lib=blosc2");
             format!("{}/include/blosc2.h", lib.display())
         }
 

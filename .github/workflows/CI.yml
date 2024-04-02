@@ -52,7 +52,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
-          conda install clang -y
+          conda install clang_osx-64 -y
           brew install ninja
 
       - name: Install packages (Windows)

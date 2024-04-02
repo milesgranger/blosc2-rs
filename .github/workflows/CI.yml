@@ -29,6 +29,7 @@ jobs:
         with:
           submodules: recursive
       - uses: conda-incubator/setup-miniconda@v3
+        if: runner.os != 'macOS' && ${{ matrix.flags != '' }}
         with:
           python-version: 3.12
           mamba-version: "*"
@@ -37,21 +38,22 @@ jobs:
           activate-environment: blosc2
           environment-file: environment.yml
       - shell: bash -el {0}
+        if: runner.os != 'macOS' && ${{ matrix.flags != '' }}
         run: |
           conda info
           conda list
           conda config --show-sources
           conda config --show
           printenv | sort
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install packages (macOS)
         if: runner.os == 'macOS'
-        run: brew install ninja
-
-      - name: Set OSX deployment target
-        run: echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
+        run: |
+          echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
+          brew install ninja
 
       - name: Install packages (Windows)
         if: runner.os == 'Windows'

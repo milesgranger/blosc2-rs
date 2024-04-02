@@ -20,6 +20,7 @@ jobs:
           - macos-14
           - windows-latest
           - ubuntu-latest
+          - macos-latest
         flags:
           - --features use-system-blosc2
           - ''

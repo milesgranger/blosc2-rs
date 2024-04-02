@@ -23,7 +23,7 @@ fn main() {
 
             println!("cargo:rustc-link-search={}/lib64", lib.display());
             println!("cargo:rustc-link-search={}/lib", lib.display());
-            println!("cargo:rustc-link-lib=blosc2");
+            println!("cargo:rustc-link-lib=static=blosc2");
             format!("{}/include/blosc2.h", lib.display())
         }
 

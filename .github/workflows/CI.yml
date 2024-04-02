@@ -53,6 +53,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
+          echo "CC=gcc" >> $GITHUB_ENV
           brew install ninja
 
       - name: Install packages (Windows)

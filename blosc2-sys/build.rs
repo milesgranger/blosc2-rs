@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[cfg(feature = "use-system-blosc2")]
@@ -9,15 +9,16 @@ fn main() {
         // build blosc2 from source
         #[cfg(not(feature = "use-system-blosc2"))]
         {
-            let out_dir = std::env::var("OUT_DIR").unwrap();
-            let install_path = format!("{}/{}", &out_dir, "blosc2-install");
-            let build_path = format!("{}/{}", &out_dir, "blosc2-build");
+            let out_dir_str = std::env::var("OUT_DIR").unwrap();
+            let out_dir = Path::new(&out_dir_str);
+            let install_path = out_dir.join("blosc2-install");
+            let build_path = out_dir.join("blosc2-build");
 
             let configure_output = Command::new("cmake")
                 .arg(format!("-S{}/{}", env!("CARGO_MANIFEST_DIR"), "c-blosc2"))
-                .arg(format!("-B{}", &build_path))
+                .arg(format!("-B{}", build_path.display()))
                 .arg("-DCMAKE_BUILD_TYPE=Release")
-                .arg(format!("-DCMAKE_INSTALL_PREFIX={}", &install_path))
+                .arg(format!("-DCMAKE_INSTALL_PREFIX={}", install_path.display()))
                 .arg("-DCMAKE_C_FLAGS=-fPIE")
                 .arg("-DCMAKE_POSITION_INDEPENDENT_CODE=ON")
                 .arg("-DBUILD_SHARED_LIBS=OFF")
@@ -50,10 +51,10 @@ fn main() {
                 );
             }
 
-            println!("cargo:rustc-link-search={}/lib64", &install_path);
-            println!("cargo:rustc-link-search={}/lib", &install_path);
+            println!("cargo:rustc-link-search={}/lib64", install_path.display());
+            println!("cargo:rustc-link-search={}/lib", install_path.display());
             println!("cargo:rustc-link-lib=static=blosc2");
-            format!("{}/include/blosc2.h", &install_path)
+            format!("{}/include/blosc2.h", install_path.display())
         }
 
         // Use system blosc2

@@ -17,6 +17,7 @@ fn main() {
                 .define("BUILD_BENCHMARKS", "OFF")
                 .define("BUILD_FUZZERS", "OFF")
                 .define("BUILD_PLUGINS", "OFF")
+                .env("CC", "gcc")
                 .pic(true)
                 .always_configure(true)
                 .build();

@@ -19,8 +19,11 @@ fn main() {
                 .define("BUILD_SHARED_LIBS", "OFF")
                 .define("BUILD_BENCHMARKS", "OFF")
                 .define("BUILD_FUZZERS", "OFF")
-                // .define("BUILD_PLUGINS", "OFF")
+                .define("BUILD_PLUGINS", "OFF")
+                .profile("Release")
+                .very_verbose(true)
                 .pic(true)
+                .out_dir(env!("CARGO_MANIFEST_DIR"))
                 .always_configure(true)
                 .build();
 

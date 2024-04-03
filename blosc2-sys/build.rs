@@ -9,6 +9,9 @@ fn main() {
         #[cfg(not(feature = "use-system-blosc2"))]
         {
             let lib = cmake::Config::new("c-blosc2")
+                .define("BLOSC_INSTALL", "ON")
+                .define("CMAKE_C_FLAGS", "-fPIE")
+                .define("CMAKE_POSITION_INDEPENDENT_CODE", "ON")
                 .define("STATIC_LIB", "ON")
                 .define("SHARED_LIB", "OFF")
                 .define("BUILD_TESTS", "OFF")
@@ -16,14 +19,13 @@ fn main() {
                 .define("BUILD_SHARED_LIBS", "OFF")
                 .define("BUILD_BENCHMARKS", "OFF")
                 .define("BUILD_FUZZERS", "OFF")
-                .define("BUILD_PLUGINS", "OFF")
-                .env("CC", "gcc")
+                // .define("BUILD_PLUGINS", "OFF")
                 .pic(true)
                 .always_configure(true)
                 .build();
 
-            println!("cargo:rustc-link-search={}/lib64", lib.display());
-            println!("cargo:rustc-link-search={}/lib", lib.display());
+            println!("cargo:rustc-link-search=native={}/lib64", lib.display());
+            println!("cargo:rustc-link-search=native={}/lib", lib.display());
             println!("cargo:rustc-link-lib=static=blosc2");
             format!("{}/include/blosc2.h", lib.display())
         }
@@ -49,6 +51,7 @@ fn main() {
         .layout_tests(false)
         .no_default("tagMONITORINFOEXA") // Windows specific, no default [u8;40usize]
         .opaque_type("_IMAGE_TLS_DIRECTORY64") // Windows specific, error[E0588]: packed type cannot transitively contain a #[repr(align)] type
+        .opaque_type("__cpu_model")
         .derive_default(true)
         .derive_copy(true)
         .derive_debug(true)

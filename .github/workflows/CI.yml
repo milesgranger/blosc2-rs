@@ -45,13 +45,13 @@ jobs:
 
       - uses: rui314/setup-mold@v1
 
-      - name: Build
-        run: cargo build
-        env:
-          CC: clang
-          CFLAGS: ""
-          LDFLAGS: ""
-          CI: true
+      # - name: Build
+      #   run: cargo build
+      #   env:
+      #     CC: clang
+      #     CFLAGS: ""
+      #     LDFLAGS: ""
+      #     CI: true
 
       - name: Test
         run: cargo test

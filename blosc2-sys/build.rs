@@ -9,6 +9,7 @@ fn main() {
         #[cfg(not(feature = "use-system-blosc2"))]
         {
             let lib = cmake::Config::new("c-blosc2")
+                .define("CMAKE_C_COMPILER", "gcc")
                 // .define("BLOSC_INSTALL", "ON")
                 // .define("CMAKE_C_FLAGS", "-fPIE")
                 // .define("CMAKE_POSITION_INDEPENDENT_CODE", "ON")

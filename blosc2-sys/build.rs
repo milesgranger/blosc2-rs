@@ -28,6 +28,7 @@ fn main() {
                 .arg("-DBUILD_EXAMPLES=OFF")
                 .arg("-DBUILD_TESTS=OFF")
                 .arg("-DBLOSC_INSTALL=ON")
+                .arg("-GNinja")
                 .output()
                 .unwrap();
             if !configure_output.status.success() {

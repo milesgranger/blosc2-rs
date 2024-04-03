@@ -56,7 +56,7 @@ jobs:
       - name: Test
         run: cargo test
         env:
-          CC: clang
-          CFLAGS: ""
-          LDFLAGS: ""
+          CC: gcc
+          # CFLAGS: ""
+          # LDFLAGS: ""
           CI: true

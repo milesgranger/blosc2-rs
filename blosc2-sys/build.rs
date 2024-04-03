@@ -13,10 +13,10 @@ fn main() {
                 .define("CMAKE_C_FLAGS", "-fPIE")
                 .define("CMAKE_POSITION_INDEPENDENT_CODE", "ON")
                 .define("STATIC_LIB", "ON")
-                .define("SHARED_LIB", "OFF")
+                .define("SHARED_LIB", "ON")
                 .define("BUILD_TESTS", "OFF")
                 .define("BUILD_EXAMPLES", "OFF")
-                .define("BUILD_SHARED_LIBS", "OFF")
+                .define("BUILD_SHARED_LIBS", "ON")
                 .define("BUILD_BENCHMARKS", "OFF")
                 .define("BUILD_FUZZERS", "OFF")
                 .define("BUILD_PLUGINS", "OFF")
@@ -54,7 +54,6 @@ fn main() {
         .layout_tests(false)
         .no_default("tagMONITORINFOEXA") // Windows specific, no default [u8;40usize]
         .opaque_type("_IMAGE_TLS_DIRECTORY64") // Windows specific, error[E0588]: packed type cannot transitively contain a #[repr(align)] type
-        .opaque_type("__cpu_model")
         .derive_default(true)
         .derive_copy(true)
         .derive_debug(true)

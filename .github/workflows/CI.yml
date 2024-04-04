@@ -46,9 +46,4 @@ jobs:
           sudo apt install build-essential ninja-build -y
 
       - name: Test
-        run: cargo test
-        env:
-          CC: gcc
-          # CFLAGS: ""
-          # LDFLAGS: ""
-          CI: true
+        run: CC=gcc CXX=gcc cargo test

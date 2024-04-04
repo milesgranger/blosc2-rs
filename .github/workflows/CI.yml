@@ -48,4 +48,4 @@ jobs:
       - uses: rui314/setup-mold@v1
 
       - name: Test
-        run: CC=gcc CXX=gcc cargo test
+        run: cargo test

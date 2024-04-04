@@ -33,7 +33,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
-          brew install ninja gcc
+          brew install ninja
 
       - name: Install packages (Windows)
         if: runner.os == 'Windows'
@@ -47,5 +47,15 @@ jobs:
 
       - uses: rui314/setup-mold@v1
 
+      - name: Set Env
+        shell: bash
+        # Cannot set dynamic link path from build.rs
+        # xref: https://github.com/rust-lang/cargo/issues/4895
+        run: |
+          echo "BLOSC2_INSTALL_PREFIX=$(pwd)/build" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=$(pwd)/build/lib64:$(pwd)/build/lib" >> $GITHUB_ENV
+          echo "DYLD_FALLBACK_LIBRARY_PATH=$(pwd)/build/lib64:$(pwd)/build/lib" >> $GITHUB_ENV
+
       - name: Test
-        run: cargo test --lib
+        shell: bash
+        run: cargo test

@@ -12,23 +12,24 @@ fn main() {
         let out_dir_str = std::env::var("OUT_DIR").unwrap();
         let out_dir = Path::new(&out_dir_str);
         let build_path = out_dir.join("blosc2-build");
-        let install_path = build_path.join("blosc");
+
+        let install_path_str =
+            std::env::var("BLOSC2_INSTALL_PREFIX").unwrap_or(out_dir_str.to_owned());
+        let install_path = Path::new(&install_path_str);
 
         let configure_output = Command::new("cmake")
             .arg(format!("-S{}/{}", env!("CARGO_MANIFEST_DIR"), "c-blosc2"))
             .arg(format!("-B{}", build_path.display()))
-            // .arg("-DCMAKE_BUILD_TYPE=Release")
-            // .arg(format!("-DCMAKE_INSTALL_PREFIX={}", install_path.display()))
+            .arg("-DCMAKE_BUILD_TYPE=Release")
+            .arg(format!("-DCMAKE_INSTALL_PREFIX={}", install_path.display()))
             .arg("-DBUILD_SHARED_LIBS=OFF")
-            // .arg("-DBUILD_FUZZERS=OFF")
-            // .arg("-DBUILD_BENCHMARKS=OFF")
-            // .arg("-DBUILD_EXAMPLES=OFF")
-            // .arg("-DCMAKE_CXX_FLAGS='-fuse-ld=mold'")
+            .arg("-DBUILD_FUZZERS=OFF")
+            .arg("-DBUILD_BENCHMARKS=OFF")
+            .arg("-DBUILD_EXAMPLES=OFF")
             .arg("-DBUILD_STATIC=ON")
-            // .arg("-DCMAKE_C_FLAGS='-fuse-ld=mold'")
-            // .arg("-DBUILD_TESTS=OFF")
-            // .arg("-DBLOSC_INSTALL=ON")
-            // .arg("-GNinja")
+            .arg("-DBUILD_TESTS=OFF")
+            .arg("-DBLOSC_INSTALL=ON")
+            .arg("-GNinja")
             .output()
             .unwrap();
         if !configure_output.status.success() {
@@ -40,8 +41,8 @@ fn main() {
         let build_output = Command::new("cmake")
             .arg("--build")
             .arg(&build_path)
-            .arg("--config")
-            .arg("'Release'")
+            .arg("--target")
+            .arg("install")
             .output()
             .unwrap();
 
@@ -52,7 +53,8 @@ fn main() {
             );
         }
 
-        println!("cargo::rustc-link-search={}", install_path.display());
+        println!("cargo::rustc-link-search={}/lib64", install_path.display());
+        println!("cargo::rustc-link-search={}/lib", install_path.display());
         println!("cargo::rustc-link-lib=blosc2");
     }
 

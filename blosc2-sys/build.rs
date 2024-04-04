@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-#[cfg(feature = "use-system-blosc2")]
 const BLOSC2_VERSION: &'static str = "2.14.0";
 
 fn main() {
@@ -53,7 +52,7 @@ fn main() {
             }
 
             println!("cargo:rustc-link-search={}", install_path.display());
-            println!("cargo:rustc-link-lib=static=blosc2");
+            println!("cargo:rustc-link-lib=blosc2");
             format!("{}/c-blosc2/include/blosc2.h", env!("CARGO_MANIFEST_DIR"))
         }
 

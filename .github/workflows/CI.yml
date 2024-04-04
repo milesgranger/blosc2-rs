@@ -55,6 +55,7 @@ jobs:
           echo "BLOSC2_INSTALL_PREFIX=$(pwd)/build" >> $GITHUB_ENV
           echo "LD_LIBRARY_PATH=$(pwd)/build/lib64:$(pwd)/build/lib" >> $GITHUB_ENV
           echo "DYLD_FALLBACK_LIBRARY_PATH=$(pwd)/build/lib64:$(pwd)/build/lib" >> $GITHUB_ENV
+          echo "PATH=$(pwd)/build/lib64:$(pwd)/build/lib:$PATH" >> $GITHUB_ENV
 
       - name: Test
         shell: bash

@@ -24,7 +24,6 @@ fn main() {
                 .arg("-DBUILD_SHARED_LIBS=OFF")
                 .arg("-DBUILD_FUZZERS=OFF")
                 .arg("-DBUILD_BENCHMARKS=OFF")
-                .arg("-DBUILD_SHARED_LIBS=OFF")
                 .arg("-DBUILD_EXAMPLES=OFF")
                 .arg("-DBUILD_TESTS=OFF")
                 .arg("-DBLOSC_INSTALL=ON")

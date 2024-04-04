@@ -33,7 +33,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
-          brew install ninja
+          brew install ninja gcc
 
       - name: Install packages (Windows)
         if: runner.os == 'Windows'
@@ -41,17 +41,9 @@ jobs:
 
       - name: Install packages (Ubuntu)
         if: runner.os == 'Linux'
-        run: sudo apt update
-
-      - uses: rui314/setup-mold@v1
-
-      # - name: Build
-      #   run: cargo build
-      #   env:
-      #     CC: clang
-      #     CFLAGS: ""
-      #     LDFLAGS: ""
-      #     CI: true
+        run: |
+          sudo apt update
+          sudo apt install build-essential ninja-build -y
 
       - name: Test
         run: cargo test

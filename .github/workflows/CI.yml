@@ -45,6 +45,12 @@ jobs:
           sudo apt update
           sudo apt install build-essential ninja-build -y
 
+          # Newer clang
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x ./llvm.sh
+          sudo ./llvm.sh 17
+          echo "CC=clang-17" >> $GITHUB_ENV
+
       - uses: rui314/setup-mold@v1
 
       - name: Set Env

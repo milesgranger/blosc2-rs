@@ -25,6 +25,8 @@ fn main() {
                 .arg("-DBUILD_FUZZERS=OFF")
                 .arg("-DBUILD_BENCHMARKS=OFF")
                 .arg("-DBUILD_EXAMPLES=OFF")
+                .arg("-DCMAKE_CXX_FLAGS='-fuse-ld=mold'")
+                .arg("-DCMAKE_C_FLAGS='-fuse-ld=mold'")
                 .arg("-DBUILD_TESTS=OFF")
                 .arg("-DBLOSC_INSTALL=ON")
                 .arg("-GNinja")

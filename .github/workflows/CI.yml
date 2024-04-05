@@ -36,6 +36,7 @@ jobs:
           brew install ninja
 
       - name: Install packages (Windows)
+        shell: bash
         if: runner.os == 'Windows'
         run: choco install ninja
 
@@ -45,11 +46,10 @@ jobs:
           sudo apt update
           sudo apt install build-essential ninja-build -y
 
-          # Newer clang
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x ./llvm.sh
-          sudo ./llvm.sh 17
-          echo "CC=clang-17" >> $GITHUB_ENV
+      - name: Set up Clang
+        uses: egor-tensin/setup-clang@v1
+        with:
+          version: 17
 
       - uses: rui314/setup-mold@v1
 

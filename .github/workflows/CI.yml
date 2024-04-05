@@ -17,10 +17,10 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - macos-13  # x86_64
-          - macos-14  # M1
+          # - macos-13  # x86_64
+          # - macos-14  # M1
           - windows-latest
-          - ubuntu-latest
+          # - ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:
@@ -36,7 +36,6 @@ jobs:
           brew install ninja
 
       - name: Install packages (Windows)
-        shell: bash
         if: runner.os == 'Windows'
         run: choco install ninja cmake
 
@@ -44,7 +43,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt update
-          sudo apt install build-essential ninja-build -y
+          sudo apt install ninja-build -y
 
       - name: Set up Clang (Ubuntu)
         if: runner.os == 'Linux'
@@ -52,18 +51,33 @@ jobs:
         with:
           version: 17
 
-      # - uses: rui314/setup-mold@v1
-
-      - name: Set Env
-        shell: bash
+      - name: Set Env (non-Windows)
+        if: runner.os != 'Windows'
         # Cannot set dynamic link path from build.rs
+        # So cargo test --lib works, but cargo test --doc fails to load shared library
         # xref: https://github.com/rust-lang/cargo/issues/4895
         run: |
           echo "BLOSC2_INSTALL_PREFIX=$(pwd)/build" >> $GITHUB_ENV
           echo "LD_LIBRARY_PATH=$(pwd)/build/lib64:$(pwd)/build/lib" >> $GITHUB_ENV
           echo "DYLD_FALLBACK_LIBRARY_PATH=$(pwd)/build/lib64:$(pwd)/build/lib" >> $GITHUB_ENV
-          echo "PATH=$(pwd)/build/lib64:$(pwd)/build/lib:$PATH" >> $GITHUB_ENV
+
+      - name: Set Env (Windows)
+        if: runner.os == 'Windows'
+        # Cannot set dynamic link path from build.rs
+        # So cargo test --lib works, but cargo test --doc fails to load shared library
+        # xref: https://github.com/rust-lang/cargo/issues/4895
+        run: |
+          echo "BLOSC2_INSTALL_PREFIX=${{ github.workspace }}\build" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
+          $Env:PATH += ";${{ github.workspace }}\build\lib;${{ github.workspace }}\build\lib64;${{ github.workspace }}\build\bin"
+          echo "PATH=$Env:PATH" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Test
-        shell: bash
         run: cargo test
+
+      - name: List dir
+        if: always()
+        run: |
+          ls ${{ github.workspace }}\build
+          ls ${{ github.workspace }}\build\lib
+          ls ${{ github.workspace }}\build\bin

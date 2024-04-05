@@ -22,11 +22,13 @@ fn main() {
             .arg(format!("-B{}", build_path.display()))
             .arg("-DCMAKE_BUILD_TYPE=Release")
             .arg(format!("-DCMAKE_INSTALL_PREFIX={}", install_path.display()))
-            .arg("-DBUILD_SHARED_LIBS=OFF")
+            .arg("-DCMAKE_POSITION_INDEPENDENT_CODE=ON")
+            .arg("-DBUILD_SHARED_LIBS=ON")
             .arg("-DBUILD_FUZZERS=OFF")
             .arg("-DBUILD_BENCHMARKS=OFF")
             .arg("-DBUILD_EXAMPLES=OFF")
             .arg("-DBUILD_STATIC=ON")
+            .arg("-DBUILD_SHARED=ON")
             .arg("-DBUILD_TESTS=OFF")
             .arg("-DBLOSC_INSTALL=ON")
             // .arg("-GNinja")
@@ -55,7 +57,9 @@ fn main() {
 
         println!("cargo::rustc-link-search={}/lib64", install_path.display());
         println!("cargo::rustc-link-search={}/lib", install_path.display());
-        println!("cargo::rustc-link-lib=blosc2");
+        println!("cargo::rustc-link-search={}/bin", install_path.display());
+
+        println!("cargo::rustc-link-lib=static=blosc2");
     }
 
     // Use system blosc2

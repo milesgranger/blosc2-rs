@@ -38,7 +38,7 @@ jobs:
       - name: Install packages (Windows)
         shell: bash
         if: runner.os == 'Windows'
-        run: choco install ninja
+        run: choco install ninja cmake
 
       - name: Install packages (Ubuntu)
         if: runner.os == 'Linux'
@@ -46,12 +46,13 @@ jobs:
           sudo apt update
           sudo apt install build-essential ninja-build -y
 
-      - name: Set up Clang
+      - name: Set up Clang (Ubuntu)
+        if: runner.os == "Linux"
         uses: egor-tensin/setup-clang@v1
         with:
           version: 17
 
-      - uses: rui314/setup-mold@v1
+      # - uses: rui314/setup-mold@v1
 
       - name: Set Env
         shell: bash

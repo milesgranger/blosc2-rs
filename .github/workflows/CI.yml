@@ -61,6 +61,7 @@ jobs:
       - name: Build
         shell: bash -el {0}
         run: cargo build ${{ matrix.flags }}
+
       - name: Test
         # Running tests using shared library is ugly since conda doesn't
         # update LD_LIBRARY_PATH type env vars, so would manually need to 
@@ -69,7 +70,7 @@ jobs:
         # shared library within the conda environment.
         if: ${{ matrix.flags == '--features static' }}
         shell: bash -el {0}
-        run: cargo test
+        run: cargo test ${{ matrix.flags }}
 
   test-native:
     runs-on: ${{ matrix.os }}

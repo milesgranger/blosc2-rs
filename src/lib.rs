@@ -1887,6 +1887,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn test_schunk_write() -> Result<()> {
         let input = std::iter::repeat(b"some data")

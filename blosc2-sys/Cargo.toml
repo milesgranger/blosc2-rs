@@ -13,7 +13,9 @@ links = "blosc2"
 [features]
 defaults = []
 use-system-blosc2 = []
+static = []
 
 [build-dependencies]
+cmake = "^0.1"
 bindgen = "^0.64"
 pkg-config = "^0.3"

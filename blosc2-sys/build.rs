@@ -58,7 +58,7 @@ fn main() {
             let search_path = install_path.join(subdir);
             println!("cargo::rustc-link-search={}", search_path.display());
         }
-        println!("cargo::rustc-link-lib=static=blosc2");
+        println!("cargo::rustc-link-lib=blosc2");
     }
 
     // Use system blosc2

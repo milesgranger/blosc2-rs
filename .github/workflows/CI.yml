@@ -22,7 +22,7 @@ jobs:
           - ubuntu-latest
         flags:
           - --features use-system-blosc2
-          - ''
+          - --features static
     steps:
       - uses: actions/checkout@v3
         with:
@@ -67,7 +67,7 @@ jobs:
         # set the library to a currently discoverable place or update these
         # env vars for each platform. Won't automatically locate the blosc2 
         # shared library within the conda environment.
-        if: ${{ matrix.flags == '' }}
+        if: ${{ matrix.flags == '--features static' }}
         shell: bash -el {0}
         run: cargo test
 

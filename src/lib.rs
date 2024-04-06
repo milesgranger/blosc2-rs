@@ -1853,7 +1853,7 @@ mod tests {
     }
 
     // Something wrong w/ Windows' into_vec or something
-    #[cfg(not(windows))]
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn test_schunk_basic() -> Result<()> {
         let input = b"some data";
@@ -1887,7 +1887,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(not(windows))]
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn test_schunk_write() -> Result<()> {
         let input = std::iter::repeat(b"some data")

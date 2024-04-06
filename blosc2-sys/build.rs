@@ -55,10 +55,10 @@ fn main() {
             );
         }
 
-        println!("cargo::rustc-link-search={}/lib64", install_path.display());
-        println!("cargo::rustc-link-search={}/lib", install_path.display());
-        println!("cargo::rustc-link-search={}/bin", install_path.display());
-
+        for subdir in &["lib64", "lib", "bin"] {
+            let search_path = install_path.join(subdir);
+            println!("cargo::rustc-link-search={}", search_path.display());
+        }
         println!("cargo::rustc-link-lib=blosc2");
     }
 

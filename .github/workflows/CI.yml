@@ -72,6 +72,9 @@ jobs:
           $Env:PATH += ";${{ github.workspace }}\build\lib;${{ github.workspace }}\build\lib64;${{ github.workspace }}\build\bin"
           echo "PATH=$Env:PATH" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
+          $Env:LIBPATH += ";${{ github.workspace }}\build\lib;${{ github.workspace }}\build\lib64;${{ github.workspace }}\build\bin"
+          echo "LIBPATH=$Env:LIBPATH" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Test
         run: cargo test
         env:

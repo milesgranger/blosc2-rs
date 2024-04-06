@@ -81,7 +81,7 @@ jobs:
       - name: Test
         run: cargo test
         env:
-          CC: cl
+          CC: gcc
 
       - name: List dir
         if: always()

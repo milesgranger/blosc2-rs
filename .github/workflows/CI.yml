@@ -79,13 +79,4 @@ jobs:
           echo "LIB=$Env:LIB" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Test
-        run: cargo test -- --test-threads 1
-        env:
-          CC: gcc
-
-      - name: List dir
-        if: always()
-        run: |
-          ls ${{ github.workspace }}\build
-          ls ${{ github.workspace }}\build\lib
-          ls ${{ github.workspace }}\build\bin
+        run: cargo test

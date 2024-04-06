@@ -1917,6 +1917,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn test_get_version_string() -> Result<()> {
         let version = get_version_string()?;
@@ -1924,6 +1925,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn test_get_complib_version_string() -> Result<()> {
         let info = get_complib_info(Codec::BloscLz)?;

@@ -27,11 +27,11 @@ fn main() {
             .arg("-DBUILD_FUZZERS=OFF")
             .arg("-DBUILD_BENCHMARKS=OFF")
             .arg("-DBUILD_EXAMPLES=OFF")
-            .arg("-DBUILD_STATIC=OFF")
+            .arg("-DBUILD_STATIC=ON")
             .arg("-DBUILD_SHARED=ON")
             .arg("-DBUILD_TESTS=OFF")
             .arg("-DBLOSC_INSTALL=ON")
-            .arg("-GNinja")
+            // .arg("-GNinja")
             .output()
             .unwrap();
         if !configure_output.status.success() {

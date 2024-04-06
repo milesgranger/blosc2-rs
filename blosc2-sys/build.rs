@@ -63,7 +63,7 @@ fn main() {
     {
         match std::env::var("BLOSC2_INSTALL_PREFIX") {
             Ok(prefix) => {
-                let install_path = Path::new(prefix);
+                let install_path = Path::new(&prefix);
                 for subdir in &["lib64", "lib", "bin"] {
                     let search_path = install_path.join(subdir);
                     println!("cargo::rustc-link-search={}", search_path.display());

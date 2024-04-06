@@ -31,7 +31,7 @@ fn main() {
             .arg("-DBUILD_SHARED=ON")
             .arg("-DBUILD_TESTS=OFF")
             .arg("-DBLOSC_INSTALL=ON")
-            // .arg("-GNinja")
+            .arg("-GNinja")
             .output()
             .unwrap();
         if !configure_output.status.success() {

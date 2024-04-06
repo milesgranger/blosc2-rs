@@ -1,8 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const BLOSC2_VERSION: &'static str = "2.14.0";
-
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
 
@@ -58,21 +56,35 @@ fn main() {
             let search_path = install_path.join(subdir);
             println!("cargo::rustc-link-search={}", search_path.display());
         }
-        println!("cargo::rustc-link-lib=blosc2");
     }
 
     // Use system blosc2
     #[cfg(feature = "use-system-blosc2")]
     {
-        let lib = pkg_config::Config::new()
-            .exactly_version(BLOSC2_VERSION)
-            .probe("blosc2")
-            .unwrap();
-        for linkpath in lib.link_paths {
-            println!("cargo:rustc-link-search={}", linkpath.display());
+        match std::env::var("BLOSC2_INSTALL_PREFIX") {
+            Ok(prefix) => {
+                let install_path = Path::new(prefix);
+                for subdir in &["lib64", "lib", "bin"] {
+                    let search_path = install_path.join(subdir);
+                    println!("cargo::rustc-link-search={}", search_path.display());
+                }
+            }
+
+            // Fall back to try and locate w/ pkg-config
+            // TODO: 3rd option, just assume it's discoverable in the current environment?
+            Err(_) => {
+                let lib = pkg_config::Config::new()
+                    .exactly_version("2.14.0")
+                    .probe("blosc2")
+                    .unwrap();
+                for linkpath in lib.link_paths {
+                    println!("cargo:rustc-link-search={}", linkpath.display());
+                }
+            }
         }
-        println!("cargo:rustc-link-lib=blosc2");
     }
+
+    println!("cargo:rustc-link-lib=blosc2");
 
     let out = PathBuf::from(&(format!("{}/bindings.rs", std::env::var("OUT_DIR").unwrap())));
     bindgen::Builder::default()

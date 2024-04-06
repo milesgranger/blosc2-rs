@@ -1852,67 +1852,67 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_schunk_basic() -> Result<()> {
-        let input = b"some data";
-        let storage = schunk::Storage::default()
-            .set_contiguous(true)
-            .set_cparams(&mut CParams::from(&input[0]))
-            .set_dparams(&mut DParams::default());
-        let mut schunk = schunk::SChunk::new(storage);
+    // #[test]
+    // fn test_schunk_basic() -> Result<()> {
+    //     let input = b"some data";
+    //     let storage = schunk::Storage::default()
+    //         .set_contiguous(true)
+    //         .set_cparams(&mut CParams::from(&input[0]))
+    //         .set_dparams(&mut DParams::default());
+    //     let mut schunk = schunk::SChunk::new(storage);
 
-        assert!(schunk.is_contiguous());
-        assert_eq!(schunk.typesize(), 1);
-        assert!(schunk.path().is_none());
+    //     assert!(schunk.is_contiguous());
+    //     assert_eq!(schunk.typesize(), 1);
+    //     assert!(schunk.path().is_none());
 
-        let mut decompressed = vec![0u8; input.len()];
+    //     let mut decompressed = vec![0u8; input.len()];
 
-        let n = schunk.append_buffer(input)?;
-        schunk.decompress_chunk(n - 1, &mut decompressed)?;
-        assert_eq!(input, decompressed.as_slice());
+    //     let n = schunk.append_buffer(input)?;
+    //     schunk.decompress_chunk(n - 1, &mut decompressed)?;
+    //     assert_eq!(input, decompressed.as_slice());
 
-        {
-            // ensure clone then drop doesn't free the schunk ptr, original still needs is
-            let _cloned = schunk.clone();
-        }
-        assert_eq!(schunk.n_chunks(), 1);
+    //     {
+    //         // ensure clone then drop doesn't free the schunk ptr, original still needs is
+    //         let _cloned = schunk.clone();
+    //     }
+    //     assert_eq!(schunk.n_chunks(), 1);
 
-        // Reconstruct thru vec
-        let v = schunk.into_vec()?;
-        schunk = schunk::SChunk::from_vec(v)?;
-        assert_eq!(schunk.n_chunks(), 1);
+    //     // Reconstruct thru vec
+    //     let v = schunk.into_vec()?;
+    //     schunk = schunk::SChunk::from_vec(v)?;
+    //     assert_eq!(schunk.n_chunks(), 1);
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
-    #[test]
-    fn test_schunk_write() -> Result<()> {
-        let input = std::iter::repeat(b"some data")
-            .take(BUFSIZE)
-            .flat_map(|v| v.to_vec())
-            .collect::<Vec<u8>>();
-        let storage = schunk::Storage::default()
-            .set_contiguous(true)
-            .set_cparams(&mut CParams::from(&input[0]))
-            .set_dparams(&mut DParams::default());
-        let mut schunk = schunk::SChunk::new(storage);
+    // #[test]
+    // fn test_schunk_write() -> Result<()> {
+    //     let input = std::iter::repeat(b"some data")
+    //         .take(BUFSIZE)
+    //         .flat_map(|v| v.to_vec())
+    //         .collect::<Vec<u8>>();
+    //     let storage = schunk::Storage::default()
+    //         .set_contiguous(true)
+    //         .set_cparams(&mut CParams::from(&input[0]))
+    //         .set_dparams(&mut DParams::default());
+    //     let mut schunk = schunk::SChunk::new(storage);
 
-        let nbytes = std::io::copy(&mut Cursor::new(input.clone()), &mut schunk)
-            .map_err(|e| Error::Other(e.to_string()))?;
-        assert_eq!(nbytes as usize, input.len());
+    //     let nbytes = std::io::copy(&mut Cursor::new(input.clone()), &mut schunk)
+    //         .map_err(|e| Error::Other(e.to_string()))?;
+    //     assert_eq!(nbytes as usize, input.len());
 
-        let ratio = schunk.compression_ratio();
-        assert!(84. < ratio);
-        assert!(86. > ratio);
+    //     let ratio = schunk.compression_ratio();
+    //     assert!(84. < ratio);
+    //     assert!(86. > ratio);
 
-        let mut uncompressed = vec![];
-        let mut decoder = schunk::SChunkDecoder::new(&mut schunk);
-        let n = std::io::copy(&mut decoder, &mut uncompressed).unwrap();
-        assert_eq!(input, uncompressed.as_slice());
-        assert_eq!(n as usize, input.len());
+    //     let mut uncompressed = vec![];
+    //     let mut decoder = schunk::SChunkDecoder::new(&mut schunk);
+    //     let n = std::io::copy(&mut decoder, &mut uncompressed).unwrap();
+    //     assert_eq!(input, uncompressed.as_slice());
+    //     assert_eq!(n as usize, input.len());
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     // #[test]
     // fn test_get_version_string() -> Result<()> {

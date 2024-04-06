@@ -59,7 +59,7 @@ fn main() {
         println!("cargo::rustc-link-search={}/lib", install_path.display());
         println!("cargo::rustc-link-search={}/bin", install_path.display());
 
-        println!("cargo::rustc-link-lib=static=blosc2");
+        println!("cargo::rustc-link-lib=blosc2");
     }
 
     // Use system blosc2

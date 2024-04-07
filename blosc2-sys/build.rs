@@ -56,7 +56,7 @@ fn main() {
             // TODO: 3rd option, just assume it's discoverable in the current environment?
             Err(_) => {
                 let lib = pkg_config::Config::new()
-                    .exactly_version("2.14.0")
+                    .exactly_version("2.14.3")
                     .probe("blosc2")
                     .unwrap();
                 for linkpath in lib.link_paths {

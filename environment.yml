@@ -3,4 +3,4 @@ channels:
   - conda-forge
 dependencies:
   - pkg-config
-  - c-blosc2 ==2.14.0
+  - c-blosc2 ==2.14.3

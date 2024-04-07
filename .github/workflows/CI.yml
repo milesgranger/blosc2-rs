@@ -11,7 +11,7 @@ on:
       - prereleased
 
 jobs:
-  build-and-test:
+  test-conda-env:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -22,7 +22,7 @@ jobs:
           - ubuntu-latest
         flags:
           - --features use-system-blosc2
-          - ''
+          - --features static
     steps:
       - uses: actions/checkout@v3
         with:
@@ -61,12 +61,83 @@ jobs:
       - name: Build
         shell: bash -el {0}
         run: cargo build ${{ matrix.flags }}
+
       - name: Test
         # Running tests using shared library is ugly since conda doesn't
         # update LD_LIBRARY_PATH type env vars, so would manually need to 
         # set the library to a currently discoverable place or update these
         # env vars for each platform. Won't automatically locate the blosc2 
         # shared library within the conda environment.
-        if: ${{ matrix.flags == '' }}
+        if: ${{ matrix.flags == '--features static' }}
         shell: bash -el {0}
+        run: cargo test ${{ matrix.flags }}
+
+  test-native:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-13  # x86_64
+          - macos-14  # M1
+          - windows-latest
+          - ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install packages (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
+          brew install ninja
+
+      - name: Install packages (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja cmake
+
+      - name: Install packages (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt update
+          sudo apt install ninja-build -y
+
+      - name: Set up Clang (Ubuntu)
+        if: runner.os == 'Linux'
+        uses: egor-tensin/setup-clang@v1
+        with:
+          version: 17
+
+      - name: Set Env (non-Windows)
+        if: runner.os != 'Windows'
+        # Cannot set dynamic link path from build.rs
+        # So cargo test --lib works, but cargo test --doc fails to load shared library
+        # xref: https://github.com/rust-lang/cargo/issues/4895
+        run: |
+          echo "BLOSC2_INSTALL_PREFIX=$(pwd)/build" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=$(pwd)/build/lib64:$(pwd)/build/lib" >> $GITHUB_ENV
+          echo "DYLD_FALLBACK_LIBRARY_PATH=$(pwd)/build/lib64:$(pwd)/build/lib" >> $GITHUB_ENV
+
+      - name: Set Env (Windows)
+        if: runner.os == 'Windows'
+        # Cannot set dynamic link path from build.rs
+        # So cargo test --lib works, but cargo test --doc fails to load shared library
+        # xref: https://github.com/rust-lang/cargo/issues/4895
+        run: |
+          echo "BLOSC2_INSTALL_PREFIX=${{ github.workspace }}\build" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
+          $Env:PATH += ";${{ github.workspace }}\build\lib;${{ github.workspace }}\build\lib64;${{ github.workspace }}\build\bin"
+          echo "PATH=$Env:PATH" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
+          $Env:LIBPATH += ";${{ github.workspace }}\build\lib;${{ github.workspace }}\build\lib64;${{ github.workspace }}\build\bin"
+          echo "LIBPATH=$Env:LIBPATH" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
+          $Env:LIB += ";${{ github.workspace }}\build\lib;${{ github.workspace }}\build\lib64;${{ github.workspace }}\build\bin"
+          echo "LIB=$Env:LIB" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Test
         run: cargo test

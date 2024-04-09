@@ -72,20 +72,23 @@ fn main() {
     #[cfg(not(feature = "static"))]
     println!("cargo:rustc-link-lib=blosc2");
 
-    // let out = PathBuf::from(&(format!("{}/bindings.rs", std::env::var("OUT_DIR").unwrap())));
-    // bindgen::Builder::default()
-    //     .header(format!(
-    //         "{}/c-blosc2/include/blosc2.h",
-    //         env!("CARGO_MANIFEST_DIR")
-    //     ))
-    //     .layout_tests(false)
-    //     .no_default("tagMONITORINFOEXA") // Windows specific, no default [u8;40usize]
-    //     .opaque_type("_IMAGE_TLS_DIRECTORY64") // Windows specific, error[E0588]: packed type cannot transitively contain a #[repr(align)] type
-    //     .derive_default(true)
-    //     .derive_copy(true)
-    //     .derive_debug(true)
-    //     .generate()
-    //     .unwrap()
-    //     .write_to_file(out)
-    //     .unwrap();
+    #[cfg(feature = "regenerate-bindings")]
+    {
+        let out = PathBuf::from(&(format!("{}/bindings.rs", std::env::var("OUT_DIR").unwrap())));
+        bindgen::Builder::default()
+            .header(format!(
+                "{}/c-blosc2/include/blosc2.h",
+                env!("CARGO_MANIFEST_DIR")
+            ))
+            .layout_tests(false)
+            .no_default("tagMONITORINFOEXA") // Windows specific, no default [u8;40usize]
+            .opaque_type("_IMAGE_TLS_DIRECTORY64") // Windows specific, error[E0588]: packed type cannot transitively contain a #[repr(align)] type
+            .derive_default(true)
+            .derive_copy(true)
+            .derive_debug(true)
+            .generate()
+            .unwrap()
+            .write_to_file(out)
+            .unwrap();
+    }
 }

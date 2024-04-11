@@ -16,8 +16,6 @@ fn main() {
 
         let mut build = cc::Build::new();
         build
-            .shared_flag(true)
-            .static_flag(true)
             .include("c-blosc2/include")
             .files(files(&cblosc2.join("blosc")))
             .include(&lz4)
@@ -51,6 +49,16 @@ fn main() {
             }
         }
 
+        if cfg!(feature = "static") {
+            println!("cargo:rustc-link-lib=static=blosc2");
+            build.static_flag(true);
+            build.shared_flag(false);
+        } else {
+            println!("cargo:rustc-link-lib=blosc2");
+            build.static_flag(false);
+            build.shared_flag(true);
+        }
+
         build.compile("blosc2");
     }
 
@@ -79,12 +87,6 @@ fn main() {
             }
         }
     }
-
-    #[cfg(feature = "static")]
-    println!("cargo:rustc-link-lib=static=blosc2");
-
-    #[cfg(not(feature = "static"))]
-    println!("cargo:rustc-link-lib=blosc2");
 
     #[cfg(feature = "regenerate-bindings")]
     {

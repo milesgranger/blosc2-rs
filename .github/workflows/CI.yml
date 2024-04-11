@@ -90,10 +90,13 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Test
-        if: matrix.os != 'macos-13'
+      - name: Set Environment Variables
+        run: |
+          echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
+
+      - name: Test (static linking)
         run: cargo test
 
-      - name: Test (macos-13)
-        if: matrix.os == 'macos-13'
+      - name: Test (shared linking)
+        if: always()
         run: cargo test --no-default-features  # turn of static linking, fails w/ 'Undefined symbols: __cpu_model'

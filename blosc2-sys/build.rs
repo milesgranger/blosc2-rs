@@ -17,6 +17,7 @@ fn main() {
         let mut build = cc::Build::new();
         build
             .shared_flag(false)
+            .pic(true)
             .static_flag(false)
             .include("c-blosc2/include")
             .files(files(&cblosc2.join("blosc")))

@@ -2,4 +2,6 @@
 rustflags = [
   "-C", "link-arg=-undefined",
   "-C", "link-arg=dynamic_lookup",
+  "-C", "link-arg=-undefined",
+  "-C", "link-arg=__cpu_model",
 ]

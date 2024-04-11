@@ -113,7 +113,6 @@ fn main() {
             .blocklist_type("__syscall_slong_t")
             .blocklist_type("__off64_t")
             .blocklist_type("__off_t")
-            .blocklist_type("__cpu_model")
             .size_t_is_usize(true)
             .no_default("blosc2_[c|d]params")
             .generate()

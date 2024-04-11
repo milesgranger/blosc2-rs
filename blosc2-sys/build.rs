@@ -18,6 +18,7 @@ fn main() {
         build
             // these flags don't do anything
             // xref: https://github.com/rust-lang/cc-rs/issues/594
+            .flag("-Wl,-undefined,__cpu_model")
             .shared_flag(true)
             .static_flag(true)
             .include("c-blosc2/include")

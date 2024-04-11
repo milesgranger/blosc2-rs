@@ -11,65 +11,65 @@ on:
       - prereleased
 
 jobs:
-  # test-conda-env:
-  #   runs-on: ${{ matrix.os }}
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       os:
-  #         - macos-14
-  #         - windows-latest
-  #         - ubuntu-latest
-  #       flags:
-  #         - --features use-system-blosc2
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #       with:
-  #         submodules: recursive
-  #     - uses: conda-incubator/setup-miniconda@v3
-  #       with:
-  #         python-version: 3.12
-  #         mamba-version: "*"
-  #         channels: conda-forge,defaults
-  #         channel-priority: true
-  #         activate-environment: blosc2
-  #         environment-file: environment.yml
-  #     - shell: bash -el {0}
-  #       run: |
-  #         conda info
-  #         conda list
-  #         conda config --show-sources
-  #         conda config --show
-  #         printenv | sort
-  #     - name: Install Rust toolchain
-  #       uses: dtolnay/rust-toolchain@stable
+  test-conda-env:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-14
+          - windows-latest
+          - ubuntu-latest
+        flags:
+          - --features use-system-blosc2
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: 3.12
+          mamba-version: "*"
+          channels: conda-forge,defaults
+          channel-priority: true
+          activate-environment: blosc2
+          environment-file: environment.yml
+      - shell: bash -el {0}
+        run: |
+          conda info
+          conda list
+          conda config --show-sources
+          conda config --show
+          printenv | sort
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-  #     - name: Install packages (macOS)
-  #       if: runner.os == 'macOS'
-  #       run: brew install ninja
+      - name: Install packages (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
 
-  #     - name: Install packages (Windows)
-  #       if: runner.os == 'Windows'
-  #       run: choco install ninja
+      - name: Install packages (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja
 
-  #     - name: Install packages (Ubuntu)
-  #       if: runner.os == 'Linux'
-  #       shell: bash -el {0}
-  #       run: conda install clang -y
+      - name: Install packages (Ubuntu)
+        if: runner.os == 'Linux'
+        shell: bash -el {0}
+        run: conda install clang -y
 
-  #     - name: Build
-  #       shell: bash -el {0}
-  #       run: cargo build ${{ matrix.flags }}
+      - name: Build
+        shell: bash -el {0}
+        run: cargo build ${{ matrix.flags }}
 
-  #     - name: Test
-  #       # Running tests using shared library is ugly since conda doesn't
-  #       # update LD_LIBRARY_PATH type env vars, so would manually need to 
-  #       # set the library to a currently discoverable place or update these
-  #       # env vars for each platform. Won't automatically locate the blosc2 
-  #       # shared library within the conda environment.
-  #       if: ${{ matrix.flags == '--features static' }}
-  #       shell: bash -el {0}
-  #       run: cargo test ${{ matrix.flags }}
+      - name: Test
+        # Running tests using shared library is ugly since conda doesn't
+        # update LD_LIBRARY_PATH type env vars, so would manually need to 
+        # set the library to a currently discoverable place or update these
+        # env vars for each platform. Won't automatically locate the blosc2 
+        # shared library within the conda environment.
+        if: ${{ matrix.flags == '--features static' }}
+        shell: bash -el {0}
+        run: cargo test ${{ matrix.flags }}
 
   test-native:
     runs-on: ${{ matrix.os }}
@@ -78,9 +78,9 @@ jobs:
       matrix:
         os:
           - macos-13  # x86_64
-          # - macos-14  # M1
-          # - windows-latest
-          # - ubuntu-latest
+          - macos-14  # M1
+          - windows-latest
+          - ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:
@@ -91,11 +91,7 @@ jobs:
 
       - name: Set Environment Variables
         if: runner.os == 'macOS'
-        run: |
-          echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
-          rustc --print=target-features
+        run: echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
 
       - name: Test
-        run: |
-          pip install cargo-zigbuild
-          cargo-zigbuild test
+        run: cargo test

@@ -20,7 +20,6 @@ fn main() {
             // xref: https://github.com/rust-lang/cc-rs/issues/594
             .shared_flag(true)
             .static_flag(true)
-            .flag("-fPIC")
             .include("c-blosc2/include")
             .files(files(&cblosc2.join("blosc")))
             .include(&lz4)

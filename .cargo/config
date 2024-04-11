@@ -2,5 +2,5 @@
 rustflags = [
   "-C", "link-arg=-undefined",
   "-C", "link-arg=dynamic_lookup",
-  "-C", "target-feature=+avx512",
+  "-C", "target-feature=+sse2",
 ]

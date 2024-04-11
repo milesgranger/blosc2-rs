@@ -10,8 +10,9 @@ name = "blosc2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-defaults = []
+defaults = ["static"]
 use-system-blosc2 = ["blosc2-sys/use-system-blosc2"]
+static = ["blosc2-sys/static"]
 
 [dependencies]
 blosc2-sys = { path = "blosc2-sys", version = "0.2.3+2.14.3" }

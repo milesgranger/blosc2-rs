@@ -1,59 +1,63 @@
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
 
-    // build blosc2 from source, use to use cmake crate to mimic c-blosc2 builds
-    // but this new bit is inspired from maiteko/blosc2-src-rs after a terrible experience w/ cmake
+    // build blosc2 from source
     #[cfg(not(feature = "use-system-blosc2"))]
     {
-        let cblosc2_str = format!("{}/c-blosc2", env!("CARGO_MANIFEST_DIR"));
-        let cblosc2 = Path::new(&cblosc2_str);
-        let complibs = cblosc2.join("internal-complibs");
-        let lz4 = complibs.join("lz4-1.9.4");
-        let _zstd = complibs.join("zstd-1.5.5");
+        let out_dir_str = std::env::var("OUT_DIR").unwrap();
 
-        let mut build = cc::Build::new();
-        build
-            // these flags don't do anything
-            // xref: https://github.com/rust-lang/cc-rs/issues/594
-            .shared_flag(true)
-            .static_flag(true)
-            .include("c-blosc2/include")
-            .files(files(&cblosc2.join("blosc")))
-            .include(&lz4)
-            .files(files(&lz4))
-            .define("HAVE_LZ4", None);
-        // TODO: zstd fails w/ "hidden symbol `HUF_decompress4X2_usingDTable_internal_fast_asm_loop' isn't defined"
-        // .include(&zstd)
-        // .files(files(&zstd.join("dictBuilder")))
-        // .files(files(&zstd.join("common")))
-        // .files(files(&zstd.join("compress")))
-        // .files(files(&zstd.join("decompress")))
-        // .define("HAVE_ZSTD", None);
+        let install_path_str =
+            std::env::var("BLOSC2_INSTALL_PREFIX").unwrap_or(out_dir_str.to_owned());
+        let install_path = Path::new(&install_path_str);
+
+        let mut cmake_conf = cmake::Config::new("c-blosc2");
+        cmake_conf
+            .define("CMAKE_POSITION_INDEPENDENT_CODE", "ON")
+            .define("BUILD_SHARED_LIBS", "ON")
+            .define("BUILD_FUZZERS", "OFF")
+            .define("BUILD_BENCHMARKS", "OFF")
+            .define("BUILD_EXAMPLES", "OFF")
+            .define("BUILD_STATIC", "ON")
+            .define("BUILD_SHARED", "ON")
+            .define("BUILD_TESTS", "OFF")
+            .define("BUILD_PLUGINS", "OFF")
+            .always_configure(true);
 
         if cfg!(target_feature = "sse2") {
-            build.define("SHUFFLE_SSE2_ENABLED", "1");
+            cmake_conf.define("SHUFFLE_SSE2_ENABLED", "1");
             if cfg!(target_env = "msvc") {
                 if cfg!(target_pointer_width = "32") {
-                    build.flag("/arch:SSE2");
+                    cmake_conf.cflag("/arch:SSE2");
                 }
             } else {
-                build.flag("-msse2");
+                cmake_conf.cflag("-msse2");
             }
         }
 
         if cfg!(target_feature = "avx2") {
-            build.define("SHUFFLE_AVX2_ENABLED", "1");
+            cmake_conf.define("SHUFFLE_AVX2_ENABLED", "1");
             if cfg!(target_env = "msvc") {
-                build.flag("/arch:AVX2");
+                cmake_conf.cflag("/arch:AVX2");
             } else {
-                build.flag("-mavx2");
+                cmake_conf.cflag("-mavx2");
             }
         }
 
-        build.compile("blosc2");
+        if std::env::var("BLOSC2_INSTALL_PREFIX").is_ok() {
+            let install_prefix = format!("{}", install_path.display());
+            cmake_conf
+                .define("CMAKE_INSTALL_PREFIX", install_prefix)
+                .define("BLOSC_INSTALL", "ON");
+        }
+
+        cmake_conf.build();
+
+        for subdir in &["lib64", "lib", "bin"] {
+            let search_path = install_path.join(subdir);
+            println!("cargo::rustc-link-search={}", search_path.display());
+        }
     }
 
     // Use system blosc2
@@ -81,6 +85,12 @@ fn main() {
             }
         }
     }
+
+    #[cfg(feature = "static")]
+    println!("cargo:rustc-link-lib=static=blosc2");
+
+    #[cfg(not(feature = "static"))]
+    println!("cargo:rustc-link-lib=blosc2");
 
     #[cfg(feature = "regenerate-bindings")]
     {
@@ -122,14 +132,4 @@ fn main() {
             .write_to_file(out)
             .unwrap();
     }
-}
-
-fn files(dir: &PathBuf) -> impl Iterator<Item = PathBuf> {
-    fs::read_dir(dir)
-        .expect(&format!("Not a directory: {:?}", dir))
-        .filter_map(|entry| entry.map(|entry| entry.path()).ok())
-        .filter(|path| match path.extension() {
-            Some(ext) => ext == "c" || ext == "cpp" || (cfg!(target_env = "msvc") && ext == "S"),
-            None => false,
-        })
 }

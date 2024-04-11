@@ -90,8 +90,8 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
-
-      - uses: rui314/setup-mold@v1
+        with:
+          key-prefix: ${{ matrix.os }}
 
       - name: Set Environment Variables
         if: runner.os == 'macOS'

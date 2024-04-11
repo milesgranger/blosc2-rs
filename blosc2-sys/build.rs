@@ -50,6 +50,8 @@ fn main() {
                 build.flag("-mavx2");
             }
         }
+
+        build.compile("blosc2");
     }
 
     // Use system blosc2

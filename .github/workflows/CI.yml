@@ -101,5 +101,6 @@ jobs:
       - name: Test
         if: matrix.os == 'macos-13'
         run: |
-          docker run --rm -it -v $(pwd):/io -w /io messense/cargo-zigbuild \
+          pip install cardo-zigbuild
+          # docker run --rm -it -v $(pwd):/io -w /io messense/cargo-zigbuild \
           cargo-zigbuild test --release --target x86_64-apple-darwin

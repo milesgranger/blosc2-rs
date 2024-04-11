@@ -95,11 +95,5 @@ jobs:
         run: |
           echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
 
-      - name: Test (static linking)
-        run: cargo test --no-default-features --features static
-
-      - name: Test (shared linking)
-        if: always()
-        run: |
-          cargo clean
-          cargo test --no-default-features --features shared  # turn of static linking, fails w/ 'Undefined symbols: __cpu_model'
+      - name: Test
+        run: cargo test

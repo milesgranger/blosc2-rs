@@ -16,6 +16,8 @@ fn main() {
 
         let mut build = cc::Build::new();
         build
+            .shared_flag(false)
+            .static_flag(false)
             .include("c-blosc2/include")
             .files(files(&cblosc2.join("blosc")))
             .include(&lz4)
@@ -48,18 +50,6 @@ fn main() {
                 build.flag("-mavx2");
             }
         }
-
-        if cfg!(feature = "static") {
-            println!("cargo:rustc-link-lib=static=blosc2");
-            build.static_flag(true);
-            build.shared_flag(false);
-        } else {
-            println!("cargo:rustc-link-lib=blosc2");
-            build.static_flag(false);
-            build.shared_flag(true);
-        }
-
-        build.compile("blosc2");
     }
 
     // Use system blosc2

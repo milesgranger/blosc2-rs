@@ -93,6 +93,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
+          rustc --print=target-features
 
       - name: Test
         run: |

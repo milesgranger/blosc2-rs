@@ -18,6 +18,7 @@ fn main() {
         build
             // these flags don't do anything
             // xref: https://github.com/rust-lang/cc-rs/issues/594
+            .flag("-undefined,__cpu_model")
             .shared_flag(true)
             .static_flag(true)
             .include("c-blosc2/include")
@@ -44,14 +45,14 @@ fn main() {
             }
         }
 
-        // if cfg!(target_feature = "avx2") {
-        //     build.define("SHUFFLE_AVX2_ENABLED", "1");
-        //     if cfg!(target_env = "msvc") {
-        //         build.flag("/arch:AVX2");
-        //     } else {
-        //         build.flag("-mavx2");
-        //     }
-        // }
+        if cfg!(target_feature = "avx2") {
+            build.define("SHUFFLE_AVX2_ENABLED", "1");
+            if cfg!(target_env = "msvc") {
+                build.flag("/arch:AVX2");
+            } else {
+                build.flag("-mavx2");
+            }
+        }
 
         build.compile("blosc2");
     }

@@ -6,6 +6,9 @@
     non_camel_case_types
 )]
 
+pub use libc;
+use libc::{timespec, FILE};
+
 #[cfg(not(feature = "regenerate-bindings"))]
 mod bindings;
 #[cfg(not(feature = "regenerate-bindings"))]

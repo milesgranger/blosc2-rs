@@ -16,9 +16,10 @@ fn main() {
 
         let mut build = cc::Build::new();
         build
-            .shared_flag(false)
-            .pic(false)
-            .static_flag(false)
+            // these flags don't do anything
+            // xref: https://github.com/rust-lang/cc-rs/issues/594
+            .shared_flag(true)
+            .static_flag(true)
             .include("c-blosc2/include")
             .files(files(&cblosc2.join("blosc")))
             .include(&lz4)

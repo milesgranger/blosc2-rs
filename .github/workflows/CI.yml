@@ -95,4 +95,4 @@ jobs:
           echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
 
       - name: Test
-        run: cargo test
+        run: cargo test -vv

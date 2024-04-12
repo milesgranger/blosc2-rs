@@ -22,13 +22,12 @@ libc = "^0.2"
 
 [features]
 default = []
-use-system-blosc2 = []
+use-system-blosc2 = ["dep:pkg-config"]
 
 # Regenerate the bindings to c-blosc2 header, will require bindgen crate
 regenerate-bindings = ["bindgen"]
 
 [build-dependencies]
 cmake = "^0.1"
-cc = "^1"
 bindgen = { version = "^0.64", optional = true }
-pkg-config = "^0.3"
+pkg-config = { version = "^0.3", optional = true }

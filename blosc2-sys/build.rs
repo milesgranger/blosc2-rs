@@ -31,7 +31,10 @@ fn main() {
                 if cfg!(target_pointer_width = "32") {
                     cmake_conf.cflag("/arch:SSE2");
                 }
-            } else {
+            } else if cfg!(target_arch = "x86_64")
+                || cfg!(target_arch = "x86")
+                || cfg!(target_arch = "i686")
+            {
                 cmake_conf.cflag("-msse2");
             }
         }
@@ -40,7 +43,10 @@ fn main() {
             cmake_conf.define("SHUFFLE_AVX2_ENABLED", "1");
             if cfg!(target_env = "msvc") {
                 cmake_conf.cflag("/arch:AVX2");
-            } else {
+            } else if cfg!(target_arch = "x86_64")
+                || cfg!(target_arch = "x86")
+                || cfg!(target_arch = "i686")
+            {
                 cmake_conf.cflag("-mavx2");
             }
         }

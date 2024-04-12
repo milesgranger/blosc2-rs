@@ -99,4 +99,4 @@ jobs:
 
       - name: Test (static)
         if: always()
-        run: cargo test --features static
+        run: cargo test --no-default-features --features static

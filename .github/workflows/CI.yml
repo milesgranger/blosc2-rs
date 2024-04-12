@@ -93,5 +93,10 @@ jobs:
         if: runner.os == 'macOS'
         run: echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
 
-      - name: Test
-        run: cargo test
+      # Known issue where testing w/ shared linked lib doesn't work with --doc testing
+      - name: Test (shared)
+        run: cargo test --features shared --lib
+
+      - name: Test (static)
+        if: always()
+        run: cargo test --features static

@@ -23,6 +23,7 @@ fn main() {
             .define("BUILD_SHARED", "ON")
             .define("BUILD_TESTS", "OFF")
             .define("BUILD_PLUGINS", "OFF")
+            .define("CMAKE_C_FLAGS", "") // blosc2 uses this to set sse2, we'll manually do that here as it doesn't catch archs/targets like musl
             .always_configure(true);
 
         if cfg!(target_feature = "sse2") {

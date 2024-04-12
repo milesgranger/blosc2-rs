@@ -21,7 +21,7 @@ exclude = [
 libc = "^0.2"
 
 [features]
-defaults = []
+default = []
 use-system-blosc2 = []
 
 # Regenerate the bindings to c-blosc2 header, will require bindgen crate

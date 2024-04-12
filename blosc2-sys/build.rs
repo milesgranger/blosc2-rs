@@ -12,11 +12,7 @@ fn main() {
             std::env::var("BLOSC2_INSTALL_PREFIX").unwrap_or(out_dir_str.to_owned());
         let install_path = Path::new(&install_path_str);
 
-        let mut cmake_c_flags = "".to_string();
-        if cfg!(target_arch = "armv7") {
-            cmake_c_flags = format!("{} -mfloat-abi=soft -march=armv7-a", cmake_c_flags);
-        }
-
+        let cmake_c_flags = std::env::var("CFLAGS").unwrap_or("".to_string());
         let mut cmake_conf = cmake::Config::new("c-blosc2");
         cmake_conf
             .define("CMAKE_POSITION_INDEPENDENT_CODE", "ON")
@@ -28,7 +24,7 @@ fn main() {
             .define("BUILD_SHARED", "ON")
             .define("BUILD_TESTS", "OFF")
             .define("BUILD_PLUGINS", "OFF")
-            .define("CMAKE_C_FLAGS", cmake_c_flags) // blosc2 uses this to set sse2, we'll manually do that here as it doesn't catch archs/targets like musl
+            .define("CMAKE_C_FLAGS", cmake_c_flags)
             .always_configure(true);
 
         if cfg!(target_feature = "sse2") {

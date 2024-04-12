@@ -100,5 +100,5 @@ jobs:
       - name: Test (static)
         # mac fails w/ missing symbol __cpu_model, not sure yet
         # windows fails on the --doc portion of tests
-        if: matrix.os != 'macos-13' || matrix.os != 'windows-latest'
+        if: matrix.os != 'macos-13' && matrix.os != 'windows-latest'
         run: cargo test --no-default-features --features static

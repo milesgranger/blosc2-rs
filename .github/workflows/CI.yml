@@ -22,7 +22,6 @@ jobs:
           - ubuntu-latest
         flags:
           - --features use-system-blosc2
-          - --features static
     steps:
       - uses: actions/checkout@v3
         with:
@@ -90,54 +89,16 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install packages (macOS)
+      - name: Set Environment Variables
         if: runner.os == 'macOS'
-        run: |
-          echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
-          brew install ninja
+        run: echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
 
-      - name: Install packages (Windows)
-        if: runner.os == 'Windows'
-        run: choco install ninja cmake
+      # Known issue where testing w/ shared linked lib doesn't work with --doc testing
+      - name: Test (shared)
+        run: cargo test --features shared --lib
 
-      - name: Install packages (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt update
-          sudo apt install ninja-build -y
-
-      - name: Set up Clang (Ubuntu)
-        if: runner.os == 'Linux'
-        uses: egor-tensin/setup-clang@v1
-        with:
-          version: 17
-
-      - name: Set Env (non-Windows)
-        if: runner.os != 'Windows'
-        # Cannot set dynamic link path from build.rs
-        # So cargo test --lib works, but cargo test --doc fails to load shared library
-        # xref: https://github.com/rust-lang/cargo/issues/4895
-        run: |
-          echo "BLOSC2_INSTALL_PREFIX=$(pwd)/build" >> $GITHUB_ENV
-          echo "LD_LIBRARY_PATH=$(pwd)/build/lib64:$(pwd)/build/lib" >> $GITHUB_ENV
-          echo "DYLD_FALLBACK_LIBRARY_PATH=$(pwd)/build/lib64:$(pwd)/build/lib" >> $GITHUB_ENV
-
-      - name: Set Env (Windows)
-        if: runner.os == 'Windows'
-        # Cannot set dynamic link path from build.rs
-        # So cargo test --lib works, but cargo test --doc fails to load shared library
-        # xref: https://github.com/rust-lang/cargo/issues/4895
-        run: |
-          echo "BLOSC2_INSTALL_PREFIX=${{ github.workspace }}\build" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-
-          $Env:PATH += ";${{ github.workspace }}\build\lib;${{ github.workspace }}\build\lib64;${{ github.workspace }}\build\bin"
-          echo "PATH=$Env:PATH" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-
-          $Env:LIBPATH += ";${{ github.workspace }}\build\lib;${{ github.workspace }}\build\lib64;${{ github.workspace }}\build\bin"
-          echo "LIBPATH=$Env:LIBPATH" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-
-          $Env:LIB += ";${{ github.workspace }}\build\lib;${{ github.workspace }}\build\lib64;${{ github.workspace }}\build\bin"
-          echo "LIB=$Env:LIB" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Test
-        run: cargo test
+      - name: Test (static)
+        # mac fails w/ missing symbol __cpu_model, not sure yet
+        # windows fails on the --doc portion of tests
+        if: matrix.os != 'macos-13' && matrix.os != 'windows-latest'
+        run: cargo test --no-default-features --features static

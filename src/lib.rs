@@ -356,8 +356,14 @@ pub mod schunk {
     ///
     /// let storage = Storage::default().set_urlpath("/some/path.blosc2");
     /// ```
-    #[derive(Default)]
     pub struct Storage(ffi::blosc2_storage);
+
+    impl Default for Storage {
+        fn default() -> Self {
+            let storage: ffi::blosc2_storage = unsafe { mem::MaybeUninit::zeroed().assume_init() };
+            Storage(storage)
+        }
+    }
 
     impl Storage {
         /// Set url/file path to specify a file-backed `schunk`.
@@ -760,7 +766,7 @@ pub mod schunk {
         fn drop(&mut self) {
             // drop if needs freed and this is last strong ref
             if self.needs_free && Arc::strong_count(&self.chunk) == 1 {
-                unsafe { ffi::free(*self.chunk.write() as _) };
+                unsafe { blosc2_sys::libc::free(*self.chunk.write() as _) };
             }
         }
     }
@@ -1213,7 +1219,7 @@ impl CParams {
 impl Default for CParams {
     #[inline]
     fn default() -> Self {
-        let mut cparams = ffi::blosc2_cparams::default();
+        let mut cparams: ffi::blosc2_cparams = unsafe { mem::MaybeUninit::zeroed().assume_init() };
         cparams.compcode = Codec::default() as _;
         cparams.clevel = CLevel::default() as _;
         cparams.typesize = 1;
@@ -1261,7 +1267,7 @@ impl DParams {
 impl Default for DParams {
     #[inline]
     fn default() -> Self {
-        let mut dparams = ffi::blosc2_dparams::default();
+        let mut dparams: ffi::blosc2_dparams = unsafe { mem::MaybeUninit::zeroed().assume_init() };
         dparams.nthreads = get_nthreads() as _;
         Self(dparams)
     }

@@ -5,17 +5,31 @@ edition = "2021"
 description = "Bindings to C Blosc2"
 license = "MIT"
 links = "blosc2"
+exclude = [
+    "c-blosc2/compat/**",
+    "c-blosc2/tests/**",
+    "c-blosc2/bench/**",
+    "c-blosc2/internal-complibs/zlib-ng-2.0.7/contrib/**",
+    "c-blosc2/internal-complibs/zlib-ng-2.0.7/examples/**",
+    "c-blosc2/internal-complibs/zlib-ng-2.0.7/doc/**",
+    "c-blosc2/internal-complibs/zstd-1.5.5/legacy/**",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+libc = "^0.2"
 
 [features]
-defaults = []
-use-system-blosc2 = []
+default = []
 static = []
+shared = []
+use-system-blosc2 = ["dep:pkg-config"]
+
+# Regenerate the bindings to c-blosc2 header, will require bindgen crate
+regenerate-bindings = ["bindgen"]
 
 [build-dependencies]
 cmake = "^0.1"
-bindgen = "^0.64"
-pkg-config = "^0.3"
+bindgen = { version = "^0.64", optional = true }
+pkg-config = { version = "^0.3", optional = true }

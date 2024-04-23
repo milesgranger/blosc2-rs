@@ -20,12 +20,19 @@ fn main() {
             .define("BUILD_FUZZERS", "OFF")
             .define("BUILD_BENCHMARKS", "OFF")
             .define("BUILD_EXAMPLES", "OFF")
-            .define("BUILD_STATIC", "ON")
-            .define("BUILD_SHARED", "ON")
+            .define("BUILD_STATIC", "OFF")
+            .define("BUILD_SHARED", "OFF")
             .define("BUILD_TESTS", "OFF")
             .define("BUILD_PLUGINS", "OFF")
             .define("CMAKE_C_FLAGS", cmake_c_flags)
             .always_configure(true);
+
+        if cfg!(feature = "static") {
+            cmake_conf.define("BUILD_STATIC", "ON");
+        }
+        if cfg!(feature = "shared") {
+            cmake_conf.define("BUILD_SHARED", "ON");
+        }
 
         if cfg!(target_feature = "sse2") {
             cmake_conf.define("SHUFFLE_SSE2_ENABLED", "1");

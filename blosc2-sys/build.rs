@@ -20,37 +20,18 @@ fn main() {
             .define("BUILD_FUZZERS", "OFF")
             .define("BUILD_BENCHMARKS", "OFF")
             .define("BUILD_EXAMPLES", "OFF")
-            .define("BUILD_STATIC", "ON")
-            .define("BUILD_SHARED", "ON")
+            .define("BUILD_STATIC", "OFF")
+            .define("BUILD_SHARED", "OFF")
             .define("BUILD_TESTS", "OFF")
             .define("BUILD_PLUGINS", "OFF")
             .define("CMAKE_C_FLAGS", cmake_c_flags)
             .always_configure(true);
 
-        if cfg!(target_feature = "sse2") {
-            cmake_conf.define("SHUFFLE_SSE2_ENABLED", "1");
-            if cfg!(target_env = "msvc") {
-                if cfg!(target_pointer_width = "32") {
-                    cmake_conf.cflag("/arch:SSE2");
-                }
-            } else if cfg!(target_arch = "x86_64")
-                || cfg!(target_arch = "x86")
-                || cfg!(target_arch = "i686")
-            {
-                cmake_conf.cflag("-msse2");
-            }
+        if cfg!(feature = "static") {
+            cmake_conf.define("BUILD_STATIC", "ON");
         }
-
-        if cfg!(target_feature = "avx2") {
-            cmake_conf.define("SHUFFLE_AVX2_ENABLED", "1");
-            if cfg!(target_env = "msvc") {
-                cmake_conf.cflag("/arch:AVX2");
-            } else if cfg!(target_arch = "x86_64")
-                || cfg!(target_arch = "x86")
-                || cfg!(target_arch = "i686")
-            {
-                cmake_conf.cflag("-mavx2");
-            }
+        if cfg!(feature = "shared") {
+            cmake_conf.define("BUILD_SHARED", "ON");
         }
 
         if std::env::var("BLOSC2_INSTALL_PREFIX").is_ok() {
@@ -58,6 +39,12 @@ fn main() {
             cmake_conf
                 .define("CMAKE_INSTALL_PREFIX", install_prefix)
                 .define("BLOSC_INSTALL", "ON");
+        }
+
+        // Solves undefined reference to __cpu_model when using __builtin_cpu_supports() in shuffle.c
+        if let Ok(true) = std::env::var("CARGO_CFG_TARGET_ENV").map(|v| v == "musl") {
+            // TODO: maybe not always libgcc? I'm not sure.
+            println!("cargo:rustc-link-lib=gcc");
         }
 
         cmake_conf.build();

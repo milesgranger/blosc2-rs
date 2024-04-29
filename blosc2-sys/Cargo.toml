@@ -1,6 +1,6 @@
 [package]
 name = "blosc2-sys"
-version = "0.2.3+2.14.3"
+version = "0.2.4+2.14.3"
 edition = "2021"
 description = "Bindings to C Blosc2"
 license = "MIT"
@@ -33,3 +33,4 @@ regenerate-bindings = ["bindgen"]
 cmake = "^0.1"
 bindgen = { version = "^0.64", optional = true }
 pkg-config = { version = "^0.3", optional = true }
+copy_dir = "0.1.3"

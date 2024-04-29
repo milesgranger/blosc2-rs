@@ -7,13 +7,20 @@ fn main() {
     #[cfg(not(feature = "use-system-blosc2"))]
     {
         let out_dir_str = std::env::var("OUT_DIR").unwrap();
+        let out_dir = Path::new(&out_dir_str);
+
+        // The configure step modifies the config.h.in file into c-blosc2/config.h
+        // which violates the cargo publishing/build as it modifies things outside
+        // of the crate's out dir; so we'll copy everything into out/c-blosc2
+        let src_dir = out_dir.join("c-blosc2");
+        copy_dir::copy_dir("c-blosc2", &src_dir).unwrap();
 
         let install_path_str =
             std::env::var("BLOSC2_INSTALL_PREFIX").unwrap_or(out_dir_str.to_owned());
         let install_path = Path::new(&install_path_str);
 
         let cmake_c_flags = std::env::var("CFLAGS").unwrap_or("".to_string());
-        let mut cmake_conf = cmake::Config::new("c-blosc2");
+        let mut cmake_conf = cmake::Config::new(src_dir);
         cmake_conf
             .define("CMAKE_POSITION_INDEPENDENT_CODE", "ON")
             .define("BUILD_SHARED_LIBS", "ON")

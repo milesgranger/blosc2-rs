@@ -58,7 +58,7 @@ fn main() {
 
         for subdir in &["lib64", "lib", "bin"] {
             let search_path = install_path.join(subdir);
-            println!("cargo::rustc-link-search={}", search_path.display());
+            println!("cargo:rustc-link-search=native={}", search_path.display());
         }
     }
 
@@ -70,7 +70,7 @@ fn main() {
                 let install_path = Path::new(&prefix);
                 for subdir in &["lib64", "lib", "bin"] {
                     let search_path = install_path.join(subdir);
-                    println!("cargo::rustc-link-search={}", search_path.display());
+                    println!("cargo:rustc-link-search={}", search_path.display());
                 }
             }
 

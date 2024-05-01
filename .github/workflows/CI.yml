@@ -118,4 +118,4 @@ jobs:
       - name: Test (static)
         # mac fails w/ missing symbol __cpu_model, not sure yet
         # windows fails on the --doc portion of tests
-        run: cargo test --no-default-features --features static
+        run: cargo test --no-default-features --features static -vv

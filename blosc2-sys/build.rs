@@ -13,7 +13,9 @@ fn main() {
         // which violates the cargo publishing/build as it modifies things outside
         // of the crate's out dir; so we'll copy everything into out/c-blosc2
         let src_dir = out_dir.join("c-blosc2");
-        copy_dir::copy_dir("c-blosc2", &src_dir).unwrap();
+        if !src_dir.exists() {
+            copy_dir::copy_dir("c-blosc2", &src_dir).unwrap();
+        }
 
         let install_path_str =
             std::env::var("BLOSC2_INSTALL_PREFIX").unwrap_or(out_dir_str.to_owned());

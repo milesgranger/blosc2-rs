@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");

@@ -112,7 +112,7 @@ fn main() {
             .header("c-blosc2/include/blosc2.h")
             // Tell cargo to invalidate the built crate whenever any of the
             // included header files changed.
-            .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+            .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
             .blocklist_type("__uint64_t_")
             .blocklist_type("__size_t")
             .blocklist_item("BLOSC2_[C|D]PARAMS_DEFAULTS")

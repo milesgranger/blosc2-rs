@@ -31,6 +31,6 @@ regenerate-bindings = ["bindgen"]
 
 [build-dependencies]
 cmake = "^0.1"
-bindgen = { version = "^0.64", optional = true }
+bindgen = { version = "^0.69", optional = true }
 pkg-config = { version = "^0.3", optional = true }
 copy_dir = "0.1.3"

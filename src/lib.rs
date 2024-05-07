@@ -1868,8 +1868,6 @@ mod tests {
         Ok(())
     }
 
-    // Something wrong w/ Windows' into_vec or something
-    #[cfg(not(target_os = "windows"))]
     #[test]
     fn test_schunk_basic() -> Result<()> {
         let input = b"some data";

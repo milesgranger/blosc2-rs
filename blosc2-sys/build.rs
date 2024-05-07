@@ -1,4 +1,6 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(feature = "regenerate-bindings")]
+use std::path::PathBuf;
 
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");

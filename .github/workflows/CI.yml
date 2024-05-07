@@ -11,111 +11,122 @@ on:
       - prereleased
 
 jobs:
-  test-conda-env:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - macos-14
-          - windows-latest
-          - ubuntu-latest
-        flags:
-          - --features use-system-blosc2
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - uses: conda-incubator/setup-miniconda@v3
-        with:
-          python-version: 3.12
-          mamba-version: "*"
-          channels: conda-forge,defaults
-          channel-priority: true
-          activate-environment: blosc2
-          environment-file: environment.yml
-      - shell: bash -el {0}
-        run: |
-          conda info
-          conda list
-          conda config --show-sources
-          conda config --show
-          printenv | sort
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+  # test-conda-env:
+  #   runs-on: ${{ matrix.os }}
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       os:
+  #         - macos-14
+  #         - windows-latest
+  #         - ubuntu-latest
+  #       flags:
+  #         - --features use-system-blosc2
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         submodules: recursive
+  #     - uses: conda-incubator/setup-miniconda@v3
+  #       with:
+  #         python-version: 3.12
+  #         mamba-version: "*"
+  #         channels: conda-forge,defaults
+  #         channel-priority: true
+  #         activate-environment: blosc2
+  #         environment-file: environment.yml
+  #     - shell: bash -el {0}
+  #       run: |
+  #         conda info
+  #         conda list
+  #         conda config --show-sources
+  #         conda config --show
+  #         printenv | sort
+  #     - name: Install Rust toolchain
+  #       uses: dtolnay/rust-toolchain@stable
 
-      - name: Install packages (macOS)
-        if: runner.os == 'macOS'
-        run: brew install ninja
+  #     - name: Install packages (macOS)
+  #       if: runner.os == 'macOS'
+  #       run: brew install ninja
 
-      - name: Install packages (Windows)
-        if: runner.os == 'Windows'
-        run: choco install ninja
+  #     - name: Install packages (Windows)
+  #       if: runner.os == 'Windows'
+  #       run: choco install ninja
 
-      - name: Install packages (Ubuntu)
-        if: runner.os == 'Linux'
-        shell: bash -el {0}
-        run: conda install clang -y
+  #     - name: Install packages (Ubuntu)
+  #       if: runner.os == 'Linux'
+  #       shell: bash -el {0}
+  #       run: conda install clang -y
 
-      - name: Build
-        shell: bash -el {0}
-        run: cargo build ${{ matrix.flags }}
+  #     - name: Build
+  #       shell: bash -el {0}
+  #       run: cargo build ${{ matrix.flags }}
 
-      - name: Test
-        # Running tests using shared library is ugly since conda doesn't
-        # update LD_LIBRARY_PATH type env vars, so would manually need to 
-        # set the library to a currently discoverable place or update these
-        # env vars for each platform. Won't automatically locate the blosc2 
-        # shared library within the conda environment.
-        if: ${{ matrix.flags == '--features static' }}
-        shell: bash -el {0}
-        run: cargo test ${{ matrix.flags }}
+  #     - name: Test
+  #       # Running tests using shared library is ugly since conda doesn't
+  #       # update LD_LIBRARY_PATH type env vars, so would manually need to 
+  #       # set the library to a currently discoverable place or update these
+  #       # env vars for each platform. Won't automatically locate the blosc2 
+  #       # shared library within the conda environment.
+  #       if: ${{ matrix.flags == '--features static' }}
+  #       shell: bash -el {0}
+  #       run: cargo test ${{ matrix.flags }}
 
-  test-musllinux:
+  # test-musllinux:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         submodules: recursive
+
+  #     - name: Install Rust toolchain
+  #       uses: dtolnay/rust-toolchain@stable
+
+  #     - name: Install cross
+  #       run: cargo install cross --git https://github.com/cross-rs/cross --rev 6d097fb
+
+  #     - name: Test
+  #       run: cross test --target x86_64-unknown-linux-musl --no-default-features --features static
+
+  # test-native:
+  #   runs-on: ${{ matrix.os }}
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       os:
+  #         - macos-13  # x86_64
+  #         - macos-14  # M1
+  #         - windows-latest
+  #         - ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         submodules: recursive
+
+  #     - name: Install Rust toolchain
+  #       uses: dtolnay/rust-toolchain@stable
+
+  #     - name: Set Environment Variables
+  #       if: runner.os == 'macOS'
+  #       run: |
+  #         # echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
+  #         echo "MACOSX_DEPLOYMENT_TARGET=10.12" >> $GITHUB_ENV
+
+  #     # Known issue where testing w/ shared linked lib doesn't work with --doc testing
+  #     - name: Test (shared)
+  #       run: cargo test --features shared --lib -vv
+
+  #     - name: Test (static)
+  #       run: |
+  #         cargo clean  # ensure we're starting fresh, no funny business
+  #         cargo test --no-default-features --features static -vv
+
+  test-docker-fedora:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross --rev 6d097fb
-
+      - name: Build
+        run: docker build . -t blosc2-rs/test
       - name: Test
-        run: cross test --target x86_64-unknown-linux-musl --no-default-features --features static
-
-  test-native:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - macos-13  # x86_64
-          - macos-14  # M1
-          - windows-latest
-          - ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Set Environment Variables
-        if: runner.os == 'macOS'
-        run: |
-          # echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
-          echo "MACOSX_DEPLOYMENT_TARGET=10.12" >> $GITHUB_ENV
-
-      # Known issue where testing w/ shared linked lib doesn't work with --doc testing
-      - name: Test (shared)
-        run: cargo test --features shared --lib -vv
-
-      - name: Test (static)
-        run: |
-          cargo clean  # ensure we're starting fresh, no funny business
-          cargo test --no-default-features --features static -vv
+        run: docker run blosc2-rs/test

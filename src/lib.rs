@@ -356,12 +356,20 @@ pub mod schunk {
     ///
     /// let storage = Storage::default().set_urlpath("/some/path.blosc2");
     /// ```
-    pub struct Storage(ffi::blosc2_storage);
+    pub struct Storage {
+        inner: ffi::blosc2_storage,
+        cparams: Option<CParams>,
+        dparams: Option<DParams>,
+    }
 
     impl Default for Storage {
         fn default() -> Self {
             let storage: ffi::blosc2_storage = unsafe { mem::MaybeUninit::zeroed().assume_init() };
-            Storage(storage)
+            Storage {
+                inner: storage,
+                cparams: None,
+                dparams: None,
+            }
         }
     }
 
@@ -369,7 +377,7 @@ pub mod schunk {
         /// Set url/file path to specify a file-backed `schunk`.
         /// if not set, defaults to an in-memory `schunk`
         pub fn set_urlpath<S: AsRef<Path>>(mut self, urlpath: S) -> Result<Self> {
-            self.0.urlpath = CString::new(urlpath.as_ref().to_string_lossy().to_string())
+            self.inner.urlpath = CString::new(urlpath.as_ref().to_string_lossy().to_string())
                 .map_err(|e| Error::Other(e.to_string()))?
                 .into_raw();
             Ok(self)
@@ -385,11 +393,11 @@ pub mod schunk {
         /// assert_eq!(storage.get_urlpath().unwrap().unwrap(), "/some/path.blosc2");
         /// ```
         pub fn get_urlpath(&self) -> Result<Option<&str>> {
-            if self.0.urlpath.is_null() {
+            if self.inner.urlpath.is_null() {
                 return Ok(None);
             }
             unsafe {
-                CStr::from_ptr(self.0.urlpath)
+                CStr::from_ptr(self.inner.urlpath)
                     .to_str()
                     .map(|v| Some(v))
                     .map_err(|e| Error::Other(e.to_string()))
@@ -397,21 +405,23 @@ pub mod schunk {
         }
         /// Set the contiguous nature of the `schunk`.
         pub fn set_contiguous(mut self, contiguous: bool) -> Self {
-            self.0.contiguous = contiguous;
+            self.inner.contiguous = contiguous;
             self
         }
         /// Set compression parameters
-        pub fn set_cparams(mut self, cparams: &mut CParams) -> Self {
-            self.0.cparams = &mut cparams.0;
+        pub fn set_cparams(mut self, cparams: CParams) -> Self {
+            self.cparams = Some(cparams);
+            self.inner.cparams = &mut self.cparams.as_mut().unwrap().0;
             self
         }
         /// Get compression parameters
-        pub fn get_cparams(&self) -> CParams {
-            CParams(unsafe { *self.0.cparams })
+        pub fn get_cparams(&self) -> Option<&CParams> {
+            self.cparams.as_ref()
         }
         /// Set decompression parameters
-        pub fn set_dparams(mut self, dparams: &mut DParams) -> Self {
-            self.0.dparams = &mut dparams.0;
+        pub fn set_dparams(mut self, dparams: DParams) -> Self {
+            self.dparams = Some(dparams);
+            self.inner.dparams = &mut self.dparams.as_mut().unwrap().0;
             self
         }
     }
@@ -430,8 +440,8 @@ pub mod schunk {
     /// let input = b"some data";
     /// let storage = Storage::default()
     ///     .set_contiguous(true)
-    ///     .set_cparams(&mut CParams::from(&input[0]))
-    ///     .set_dparams(&mut DParams::default());
+    ///     .set_cparams(CParams::from(&input[0]))
+    ///     .set_dparams(DParams::default());
     /// let mut schunk = SChunk::new(storage);
     ///
     /// let n = schunk.write(input).unwrap();  // same as schunk.append_buffer(input)?;
@@ -781,7 +791,7 @@ pub mod schunk {
     impl SChunk {
         pub fn new(storage: Storage) -> Self {
             let mut storage = storage;
-            let schunk = unsafe { ffi::blosc2_schunk_new(&mut storage.0) };
+            let schunk = unsafe { ffi::blosc2_schunk_new(&mut storage.inner) };
             Self(Arc::new(RwLock::new(schunk)))
         }
 
@@ -1858,15 +1868,13 @@ mod tests {
         Ok(())
     }
 
-    // Something wrong w/ Windows' into_vec or something
-    #[cfg(not(target_os = "windows"))]
     #[test]
     fn test_schunk_basic() -> Result<()> {
         let input = b"some data";
         let storage = schunk::Storage::default()
             .set_contiguous(true)
-            .set_cparams(&mut CParams::from(&input[0]))
-            .set_dparams(&mut DParams::default());
+            .set_cparams(CParams::from(&input[0]))
+            .set_dparams(DParams::default());
         let mut schunk = schunk::SChunk::new(storage);
 
         assert!(schunk.is_contiguous());
@@ -1902,8 +1910,8 @@ mod tests {
             .collect::<Vec<u8>>();
         let storage = schunk::Storage::default()
             .set_contiguous(true)
-            .set_cparams(&mut CParams::from(&input[0]))
-            .set_dparams(&mut DParams::default());
+            .set_cparams(CParams::from(&input[0]))
+            .set_dparams(DParams::default());
         let mut schunk = schunk::SChunk::new(storage);
 
         let nbytes = std::io::copy(&mut Cursor::new(input.clone()), &mut schunk)

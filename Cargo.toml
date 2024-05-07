@@ -1,6 +1,6 @@
 [package]
 name = "blosc2-rs"
-version = "0.2.6+2.14.3"
+version = "0.3.0+2.14.3"
 description = "Blosc2"
 license = "MIT"
 edition = "2021"
@@ -12,11 +12,12 @@ name = "blosc2"
 [features]
 default = ["shared"]
 use-system-blosc2 = ["blosc2-sys/use-system-blosc2"]
+regenerate-bindings = ["blosc2-sys/regenerate-bindings"]
 static = ["blosc2-sys/static"]
 shared = ["blosc2-sys/shared"]
 
 [dependencies]
-blosc2-sys = { path = "blosc2-sys", version = "0.2.6+2.14.3" }
+blosc2-sys = { path = "blosc2-sys", version = "0.3.0+2.14.3" }
 parking_lot = "^0.12"
 
 [dev-dependencies]

@@ -1,6 +1,6 @@
 [package]
 name = "blosc2-sys"
-version = "0.2.6+2.14.3"
+version = "0.3.0+2.14.3"
 edition = "2021"
 description = "Bindings to C Blosc2"
 license = "MIT"

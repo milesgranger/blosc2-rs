@@ -59,7 +59,7 @@ jobs:
 
       - name: Build
         shell: bash -el {0}
-        run: cargo build ${{ matrix.flags }}
+        run: cargo build ${{ matrix.flags }} --release
 
       - name: Test
         # Running tests using shared library is ugly since conda doesn't
@@ -69,7 +69,7 @@ jobs:
         # shared library within the conda environment.
         if: ${{ matrix.flags == '--features static' }}
         shell: bash -el {0}
-        run: cargo test ${{ matrix.flags }}
+        run: cargo test ${{ matrix.flags }} --release
 
   test-musllinux:
     runs-on: ubuntu-latest
@@ -85,7 +85,7 @@ jobs:
         run: cargo install cross --git https://github.com/cross-rs/cross --rev 6d097fb
 
       - name: Test
-        run: cross test --target x86_64-unknown-linux-musl --no-default-features --features static
+        run: cross test --target x86_64-unknown-linux-musl --no-default-features --features static --release
 
   test-native:
     runs-on: ${{ matrix.os }}
@@ -113,9 +113,9 @@ jobs:
 
       # Known issue where testing w/ shared linked lib doesn't work with --doc testing
       - name: Test (shared)
-        run: cargo test --features shared --lib -vv
+        run: cargo test --features shared --lib -vv --release
 
       - name: Test (static)
         run: |
           cargo clean  # ensure we're starting fresh, no funny business
-          cargo test --no-default-features --features static -vv
+          cargo test --no-default-features --features static -vv --release

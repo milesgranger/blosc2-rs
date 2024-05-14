@@ -364,7 +364,7 @@ pub mod schunk {
 
     impl Default for Storage {
         fn default() -> Self {
-            let storage: ffi::blosc2_storage = unsafe { mem::MaybeUninit::zeroed().assume_init() };
+            let storage = unsafe { ffi::blosc2_get_blosc2_storage_defaults() };
             Storage {
                 inner: storage,
                 cparams: None,
@@ -1229,13 +1229,8 @@ impl CParams {
 impl Default for CParams {
     #[inline]
     fn default() -> Self {
-        let mut cparams: ffi::blosc2_cparams = unsafe { mem::MaybeUninit::zeroed().assume_init() };
-        cparams.compcode = Codec::default() as _;
-        cparams.clevel = CLevel::default() as _;
+        let mut cparams = unsafe { ffi::blosc2_get_blosc2_cparams_defaults() };
         cparams.typesize = 1;
-        cparams.splitmode = ffi::BLOSC_FORWARD_COMPAT_SPLIT as _;
-        cparams.filters[ffi::BLOSC2_MAX_FILTERS as usize - 1] = Filter::default() as _;
-        cparams.nthreads = get_nthreads() as _;
         Self(cparams)
     }
 }
@@ -1277,8 +1272,7 @@ impl DParams {
 impl Default for DParams {
     #[inline]
     fn default() -> Self {
-        let mut dparams: ffi::blosc2_dparams = unsafe { mem::MaybeUninit::zeroed().assume_init() };
-        dparams.nthreads = get_nthreads() as _;
+        let dparams = unsafe { ffi::blosc2_get_blosc2_dparams_defaults() };
         Self(dparams)
     }
 }
@@ -1935,7 +1929,7 @@ mod tests {
     #[test]
     fn test_get_version_string() -> Result<()> {
         let version = get_version_string()?;
-        assert_eq!(&version, "2.14.3");
+        assert_eq!(&version, "2.14.5.dev");
         Ok(())
     }
 

@@ -71,8 +71,14 @@ jobs:
         shell: bash -el {0}
         run: cargo test ${{ matrix.flags }} --release
 
-  test-musllinux:
+  test-cross:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-unknown-linux-musl
+          - s390x-unknown-linux-gnu
     steps:
       - uses: actions/checkout@v4
         with:
@@ -85,7 +91,7 @@ jobs:
         run: cargo install cross --git https://github.com/cross-rs/cross --rev 6d097fb
 
       - name: Test
-        run: cross test --target x86_64-unknown-linux-musl --no-default-features --features static --release
+        run: cross test --target ${{ matrix.target }} --no-default-features --features static --release
 
   test-native:
     runs-on: ${{ matrix.os }}

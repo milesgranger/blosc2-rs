@@ -563,8 +563,9 @@ pub mod schunk {
         /// assert_eq!(chunk.info().unwrap().nbytes(), 10);
         /// ```
         pub fn uninit<T>(cparams: CParams, len: usize) -> Result<Self> {
+            let mut cparams = cparams;
             if mem::size_of::<T>() != cparams.0.typesize as usize {
-                return Err("typesize mismatch between CParams and T".into());
+                cparams.0.typesize = mem::size_of::<T>() as _;
             }
             let mut dst = Vec::with_capacity(
                 (len * cparams.0.typesize as usize) + ffi::BLOSC_EXTENDED_HEADER_LENGTH as usize,
@@ -597,8 +598,9 @@ pub mod schunk {
         /// assert_eq!(chunk.decompress::<f32>().unwrap(), vec![0.123_f32, 0.123, 0.123, 0.123]);
         /// ```
         pub fn repeatval<T>(cparams: CParams, value: T, len: usize) -> Result<Self> {
+            let mut cparams = cparams;
             if mem::size_of::<T>() != cparams.0.typesize as usize {
-                return Err("typesize mismatch between CParams and T".into());
+                cparams.0.typesize = mem::size_of::<T>() as _;
             }
             let mut dst = Vec::with_capacity(
                 (len * cparams.0.typesize as usize) + ffi::BLOSC_EXTENDED_HEADER_LENGTH as usize,
@@ -632,8 +634,9 @@ pub mod schunk {
         /// assert_eq!(chunk.info().unwrap().nbytes(), 40);  // 10 elements * 4 bytes each
         /// ```
         pub fn zeros<T>(cparams: CParams, len: usize) -> Result<Self> {
+            let mut cparams = cparams;
             if mem::size_of::<T>() != cparams.0.typesize as usize {
-                return Err("typesize mismatch between CParams and T".into());
+                cparams.0.typesize = mem::size_of::<T>() as _;
             }
             let mut dst = Vec::with_capacity(
                 (len * cparams.0.typesize as usize) + ffi::BLOSC_EXTENDED_HEADER_LENGTH as usize,

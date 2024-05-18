@@ -6,7 +6,13 @@ use std::ffi::{c_void, CStr, CString};
 use std::sync::Arc;
 use std::{io, mem};
 
-pub use blosc2_sys::BLOSC2_VERSION_DATE;
+pub const BLOSC2_VERSION_DATE: &'static str =
+    unsafe { std::str::from_utf8_unchecked(blosc2_sys::BLOSC2_VERSION_DATE) };
+pub const BLOSC2_VERSION_STRING: &'static str =
+    unsafe { std::str::from_utf8_unchecked(blosc2_sys::BLOSC2_VERSION_STRING) };
+pub use blosc2_sys::{
+    BLOSC2_MAX_DIM, BLOSC2_VERSION_MAJOR, BLOSC2_VERSION_MINOR, BLOSC2_VERSION_RELEASE,
+};
 
 /// Result type used in this library
 pub type Result<T> = std::result::Result<T, Error>;

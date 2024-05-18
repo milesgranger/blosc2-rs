@@ -14,7 +14,7 @@ fn main() {
     println!(
         "Blosc2 version info: {} ({})",
         blosc2::get_version_string().unwrap(),
-        String::from_utf8(blosc2::BLOSC2_VERSION_DATE.to_vec()).unwrap()
+        blosc2::BLOSC2_VERSION_DATE
     );
 
     // Create a super-chunk container

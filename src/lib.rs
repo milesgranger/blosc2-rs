@@ -1369,6 +1369,7 @@ impl Drop for Context {
 
 /// Info about a compressed buffer
 /// Normal construction via `CompressedBufferInfo::try_from(&[u8])?`
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct CompressedBufferInfo {
     /// Number of bytes decompressed
     nbytes: usize,

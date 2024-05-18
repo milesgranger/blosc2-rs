@@ -6,6 +6,8 @@ use std::ffi::{c_void, CStr, CString};
 use std::sync::Arc;
 use std::{io, mem};
 
+pub use blosc2_sys::BLOSC2_VERSION_DATE;
+
 /// Result type used in this library
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -563,8 +565,9 @@ pub mod schunk {
         /// assert_eq!(chunk.info().unwrap().nbytes(), 10);
         /// ```
         pub fn uninit<T>(cparams: CParams, len: usize) -> Result<Self> {
+            let mut cparams = cparams;
             if mem::size_of::<T>() != cparams.0.typesize as usize {
-                return Err("typesize mismatch between CParams and T".into());
+                cparams.0.typesize = mem::size_of::<T>() as _;
             }
             let mut dst = Vec::with_capacity(
                 (len * cparams.0.typesize as usize) + ffi::BLOSC_EXTENDED_HEADER_LENGTH as usize,
@@ -597,8 +600,9 @@ pub mod schunk {
         /// assert_eq!(chunk.decompress::<f32>().unwrap(), vec![0.123_f32, 0.123, 0.123, 0.123]);
         /// ```
         pub fn repeatval<T>(cparams: CParams, value: T, len: usize) -> Result<Self> {
+            let mut cparams = cparams;
             if mem::size_of::<T>() != cparams.0.typesize as usize {
-                return Err("typesize mismatch between CParams and T".into());
+                cparams.0.typesize = mem::size_of::<T>() as _;
             }
             let mut dst = Vec::with_capacity(
                 (len * cparams.0.typesize as usize) + ffi::BLOSC_EXTENDED_HEADER_LENGTH as usize,
@@ -632,8 +636,9 @@ pub mod schunk {
         /// assert_eq!(chunk.info().unwrap().nbytes(), 40);  // 10 elements * 4 bytes each
         /// ```
         pub fn zeros<T>(cparams: CParams, len: usize) -> Result<Self> {
+            let mut cparams = cparams;
             if mem::size_of::<T>() != cparams.0.typesize as usize {
-                return Err("typesize mismatch between CParams and T".into());
+                cparams.0.typesize = mem::size_of::<T>() as _;
             }
             let mut dst = Vec::with_capacity(
                 (len * cparams.0.typesize as usize) + ffi::BLOSC_EXTENDED_HEADER_LENGTH as usize,
@@ -787,6 +792,8 @@ pub mod schunk {
     #[derive(Clone)]
     pub struct SChunk(pub(crate) Arc<RwLock<*mut ffi::blosc2_schunk>>);
 
+    unsafe impl Send for SChunk {}
+
     // Loosely inspired by blosc2-python implementation
     impl SChunk {
         pub fn new(storage: Storage) -> Self {
@@ -844,16 +851,16 @@ pub mod schunk {
             Ok(nchunks as _)
         }
 
-        /// Decompress a chunk, returning number of bytes written to output buffer
+        /// Decompress a chunk, returning number of elements of `T` written to output buffer
         #[inline]
         pub fn decompress_chunk<T>(&mut self, nchunk: usize, dst: &mut [T]) -> Result<usize> {
             let chunk = Chunk::from_schunk(self, nchunk)?;
             let info = chunk.info()?;
-            if dst.len() < info.nbytes as usize {
+            if dst.len() * mem::size_of::<T>() < info.nbytes as usize {
                 let msg = format!(
-                    "Not large enough, need {} but got {}",
+                    "Not large enough, need {} bytes but got buffer w/ {} bytes of storage",
                     info.nbytes,
-                    dst.len()
+                    dst.len() * mem::size_of::<T>()
                 );
                 return Err(msg.into());
             }
@@ -874,7 +881,7 @@ pub mod schunk {
                 let msg = format!("Non-initialized error decompressing chunk '{}'", nchunk);
                 return Err(msg.into());
             } else {
-                Ok(size as _)
+                Ok((size / mem::size_of::<T>() as i32) as _)
             }
         }
 
@@ -1229,8 +1236,7 @@ impl CParams {
 impl Default for CParams {
     #[inline]
     fn default() -> Self {
-        let mut cparams = unsafe { ffi::blosc2_get_blosc2_cparams_defaults() };
-        cparams.typesize = 1;
+        let cparams = unsafe { ffi::blosc2_get_blosc2_cparams_defaults() };
         Self(cparams)
     }
 }
@@ -1891,6 +1897,38 @@ mod tests {
         let v = schunk.into_vec()?;
         schunk = schunk::SChunk::from_vec(v)?;
         assert_eq!(schunk.n_chunks(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_schunk_thread_shared() -> Result<()> {
+        let input = b"some data";
+        let storage = schunk::Storage::default()
+            .set_contiguous(true)
+            .set_cparams(CParams::from(&input[0]))
+            .set_dparams(DParams::default());
+        let mut schunk = schunk::SChunk::new(storage);
+
+        schunk.append_buffer(input)?;
+
+        let mut schunk2 = schunk.clone();
+        std::thread::spawn(move || {
+            assert_eq!(schunk2.n_chunks(), 1);
+            schunk2.append_buffer(b"more data").unwrap();
+        })
+        .join()
+        .unwrap();
+
+        assert_eq!(schunk.n_chunks(), 2);
+        assert_eq!(
+            b"some data",
+            schunk.decompress_chunk_vec(0).unwrap().as_slice()
+        );
+        assert_eq!(
+            b"more data",
+            schunk.decompress_chunk_vec(1).unwrap().as_slice()
+        );
 
         Ok(())
     }

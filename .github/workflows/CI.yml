@@ -125,3 +125,12 @@ jobs:
         run: |
           cargo clean  # ensure we're starting fresh, no funny business
           cargo test --no-default-features --features static -vv --release
+
+      - name: Run examples
+        shell: bash
+        run: |
+          for example in $(find examples -name '*.rs'); do
+            example_name=$(basename $example .rs)
+            echo "------- Running example: ${example_name} -------"
+            cargo run --example $example_name
+          done

@@ -6,6 +6,8 @@ use std::ffi::{c_void, CStr, CString};
 use std::sync::Arc;
 use std::{io, mem};
 
+pub use blosc2_sys::BLOSC2_VERSION_DATE;
+
 /// Result type used in this library
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -849,16 +851,16 @@ pub mod schunk {
             Ok(nchunks as _)
         }
 
-        /// Decompress a chunk, returning number of bytes written to output buffer
+        /// Decompress a chunk, returning number of elements of `T` written to output buffer
         #[inline]
         pub fn decompress_chunk<T>(&mut self, nchunk: usize, dst: &mut [T]) -> Result<usize> {
             let chunk = Chunk::from_schunk(self, nchunk)?;
             let info = chunk.info()?;
-            if dst.len() < info.nbytes as usize {
+            if dst.len() * mem::size_of::<T>() < info.nbytes as usize {
                 let msg = format!(
-                    "Not large enough, need {} but got {}",
+                    "Not large enough, need {} bytes but got buffer w/ {} bytes of storage",
                     info.nbytes,
-                    dst.len()
+                    dst.len() * mem::size_of::<T>()
                 );
                 return Err(msg.into());
             }
@@ -879,7 +881,7 @@ pub mod schunk {
                 let msg = format!("Non-initialized error decompressing chunk '{}'", nchunk);
                 return Err(msg.into());
             } else {
-                Ok(size as _)
+                Ok((size / mem::size_of::<T>() as i32) as _)
             }
         }
 

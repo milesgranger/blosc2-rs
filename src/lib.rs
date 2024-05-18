@@ -790,6 +790,8 @@ pub mod schunk {
     #[derive(Clone)]
     pub struct SChunk(pub(crate) Arc<RwLock<*mut ffi::blosc2_schunk>>);
 
+    unsafe impl Send for SChunk {}
+
     // Loosely inspired by blosc2-python implementation
     impl SChunk {
         pub fn new(storage: Storage) -> Self {
@@ -1232,8 +1234,7 @@ impl CParams {
 impl Default for CParams {
     #[inline]
     fn default() -> Self {
-        let mut cparams = unsafe { ffi::blosc2_get_blosc2_cparams_defaults() };
-        cparams.typesize = 1;
+        let cparams = unsafe { ffi::blosc2_get_blosc2_cparams_defaults() };
         Self(cparams)
     }
 }
@@ -1894,6 +1895,38 @@ mod tests {
         let v = schunk.into_vec()?;
         schunk = schunk::SChunk::from_vec(v)?;
         assert_eq!(schunk.n_chunks(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_schunk_thread_shared() -> Result<()> {
+        let input = b"some data";
+        let storage = schunk::Storage::default()
+            .set_contiguous(true)
+            .set_cparams(CParams::from(&input[0]))
+            .set_dparams(DParams::default());
+        let mut schunk = schunk::SChunk::new(storage);
+
+        schunk.append_buffer(input)?;
+
+        let mut schunk2 = schunk.clone();
+        std::thread::spawn(move || {
+            assert_eq!(schunk2.n_chunks(), 1);
+            schunk2.append_buffer(b"more data").unwrap();
+        })
+        .join()
+        .unwrap();
+
+        assert_eq!(schunk.n_chunks(), 2);
+        assert_eq!(
+            b"some data",
+            schunk.decompress_chunk_vec(0).unwrap().as_slice()
+        );
+        assert_eq!(
+            b"more data",
+            schunk.decompress_chunk_vec(1).unwrap().as_slice()
+        );
 
         Ok(())
     }

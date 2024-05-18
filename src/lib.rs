@@ -1805,6 +1805,19 @@ pub fn destroy() {
     unsafe { ffi::blosc2_destroy() }
 }
 
+/// Free possible memory temporaries and thread resources. Use this
+/// when you are not going to use Blosc for a long while.
+/// A 0 if succeeds, in case of problems releasing the resources,
+/// it returns a negative number.
+pub fn free_resources() -> Result<()> {
+    let ret = unsafe { ffi::blosc2_free_resources() };
+    if ret != 0 {
+        Err(Error::Blosc2(Blosc2Error::from(ret)))
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use ctor::{ctor, dtor};

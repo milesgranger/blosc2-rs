@@ -13,7 +13,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         data.iter().for_each(|(name, data)| {
             compression_group.throughput(Throughput::Bytes(data.len() as _));
             compression_group.bench_function(name, |b| {
-                b.iter(|| compress(black_box(&data), None, None, None).unwrap())
+                b.iter(|| compress(black_box(&data), None, None, None, None).unwrap())
             });
         });
     }
@@ -22,11 +22,11 @@ fn criterion_benchmark(c: &mut Criterion) {
     {
         let mut decompression_group = c.benchmark_group("decompress");
         data.iter().for_each(|(name, data)| {
-            let compressed = compress(&data, None, None, None).unwrap();
+            let compressed = compress(&data, None, None, None, None).unwrap();
 
             decompression_group.throughput(Throughput::Bytes(compressed.len() as _));
             decompression_group.bench_function(name, |b| {
-                b.iter(|| decompress(black_box(&compressed)).unwrap())
+                b.iter(|| decompress::<u8>(black_box(&compressed)).unwrap())
             });
         });
     }
@@ -38,7 +38,8 @@ fn criterion_benchmark(c: &mut Criterion) {
             roundtrip_group.throughput(Throughput::Bytes(data.len() as _));
             roundtrip_group.bench_function(name, |b| {
                 b.iter(|| {
-                    decompress(&compress(black_box(&data), None, None, None).unwrap()).unwrap()
+                    decompress::<u8>(&compress(black_box(&data), None, None, None, None).unwrap())
+                        .unwrap()
                 })
             });
         });

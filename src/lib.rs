@@ -230,7 +230,7 @@ impl<'a> TryFrom<&'a str> for Filter {
 }
 
 /// Possible compression codecs
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Codec {
     BloscLz = ffi::BLOSC_BLOSCLZ as _,
     LZ4 = ffi::BLOSC_LZ4 as _,
@@ -366,8 +366,8 @@ pub mod schunk {
     /// ```
     pub struct Storage {
         inner: ffi::blosc2_storage,
-        cparams: Option<CParams>,
-        dparams: Option<DParams>,
+        cparams: CParams,
+        dparams: DParams,
     }
 
     impl Default for Storage {
@@ -375,8 +375,8 @@ pub mod schunk {
             let storage = unsafe { ffi::blosc2_get_blosc2_storage_defaults() };
             Storage {
                 inner: storage,
-                cparams: None,
-                dparams: None,
+                cparams: CParams::default(),
+                dparams: DParams::default(),
             }
         }
     }
@@ -418,18 +418,18 @@ pub mod schunk {
         }
         /// Set compression parameters
         pub fn set_cparams(mut self, cparams: CParams) -> Self {
-            self.cparams = Some(cparams);
-            self.inner.cparams = &mut self.cparams.as_mut().unwrap().0;
+            self.cparams = cparams;
+            self.inner.cparams = &mut self.cparams.0;
             self
         }
         /// Get compression parameters
-        pub fn get_cparams(&self) -> Option<&CParams> {
-            self.cparams.as_ref()
+        pub fn get_cparams(&self) -> &CParams {
+            &self.cparams
         }
         /// Set decompression parameters
         pub fn set_dparams(mut self, dparams: DParams) -> Self {
-            self.dparams = Some(dparams);
-            self.inner.dparams = &mut self.dparams.as_mut().unwrap().0;
+            self.dparams = dparams;
+            self.inner.dparams = &mut self.dparams.0;
             self
         }
     }
@@ -1478,6 +1478,24 @@ pub fn getitems<T>(src: &[u8], offset: usize, n_items: usize) -> Result<Vec<T>> 
     Ok(dst)
 }
 
+/// Get a list of supported compressors in this build
+#[inline]
+pub fn list_compressors() -> Result<Vec<Codec>> {
+    let names = unsafe {
+        let ptr = ffi::blosc2_list_compressors();
+        CStr::from_ptr(ptr)
+            .to_str()
+            .map(ToString::to_string)
+            .map_err(|e| Error::Other(e.to_string()))
+    }?;
+
+    let mut compressors = vec![];
+    for name in names.split(',') {
+        compressors.push(Codec::try_from(name)?);
+    }
+    Ok(compressors)
+}
+
 /// Context interface to compression, does not require call to init/destroy. For
 /// use in multithreaded applications
 #[inline]
@@ -1983,5 +2001,19 @@ mod tests {
         let info = get_complib_info(Codec::BloscLz)?;
         assert_eq!(&info, "BloscLZ: 2.5.3");
         Ok(())
+    }
+
+    #[test]
+    fn test_list_compressors() {
+        let compressors = list_compressors().unwrap();
+        for compressor in &[
+            Codec::BloscLz,
+            Codec::LZ4,
+            Codec::LZ4HC,
+            Codec::ZLIB,
+            Codec::ZSTD,
+        ] {
+            assert!(compressors.contains(compressor));
+        }
     }
 }

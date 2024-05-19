@@ -6,7 +6,13 @@ use std::ffi::{c_void, CStr, CString};
 use std::sync::Arc;
 use std::{io, mem};
 
-pub use blosc2_sys::BLOSC2_VERSION_DATE;
+pub const BLOSC2_VERSION_DATE: &'static str =
+    unsafe { std::str::from_utf8_unchecked(blosc2_sys::BLOSC2_VERSION_DATE) };
+pub const BLOSC2_VERSION_STRING: &'static str =
+    unsafe { std::str::from_utf8_unchecked(blosc2_sys::BLOSC2_VERSION_STRING) };
+pub use blosc2_sys::{
+    BLOSC2_MAX_DIM, BLOSC2_VERSION_MAJOR, BLOSC2_VERSION_MINOR, BLOSC2_VERSION_RELEASE,
+};
 
 /// Result type used in this library
 pub type Result<T> = std::result::Result<T, Error>;
@@ -224,7 +230,7 @@ impl<'a> TryFrom<&'a str> for Filter {
 }
 
 /// Possible compression codecs
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Codec {
     BloscLz = ffi::BLOSC_BLOSCLZ as _,
     LZ4 = ffi::BLOSC_LZ4 as _,
@@ -360,8 +366,8 @@ pub mod schunk {
     /// ```
     pub struct Storage {
         inner: ffi::blosc2_storage,
-        cparams: Option<CParams>,
-        dparams: Option<DParams>,
+        cparams: CParams,
+        dparams: DParams,
     }
 
     impl Default for Storage {
@@ -369,8 +375,8 @@ pub mod schunk {
             let storage = unsafe { ffi::blosc2_get_blosc2_storage_defaults() };
             Storage {
                 inner: storage,
-                cparams: None,
-                dparams: None,
+                cparams: CParams::default(),
+                dparams: DParams::default(),
             }
         }
     }
@@ -412,18 +418,18 @@ pub mod schunk {
         }
         /// Set compression parameters
         pub fn set_cparams(mut self, cparams: CParams) -> Self {
-            self.cparams = Some(cparams);
-            self.inner.cparams = &mut self.cparams.as_mut().unwrap().0;
+            self.cparams = cparams;
+            self.inner.cparams = &mut self.cparams.0;
             self
         }
         /// Get compression parameters
-        pub fn get_cparams(&self) -> Option<&CParams> {
-            self.cparams.as_ref()
+        pub fn get_cparams(&self) -> &CParams {
+            &self.cparams
         }
         /// Set decompression parameters
         pub fn set_dparams(mut self, dparams: DParams) -> Self {
-            self.dparams = Some(dparams);
-            self.inner.dparams = &mut self.dparams.as_mut().unwrap().0;
+            self.dparams = dparams;
+            self.inner.dparams = &mut self.dparams.0;
             self
         }
     }
@@ -1363,6 +1369,7 @@ impl Drop for Context {
 
 /// Info about a compressed buffer
 /// Normal construction via `CompressedBufferInfo::try_from(&[u8])?`
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct CompressedBufferInfo {
     /// Number of bytes decompressed
     nbytes: usize,
@@ -1470,6 +1477,24 @@ pub fn getitems<T>(src: &[u8], offset: usize, n_items: usize) -> Result<Vec<T>> 
     }
     unsafe { dst.set_len(nbytes as usize / mem::size_of::<T>()) };
     Ok(dst)
+}
+
+/// Get a list of supported compressors in this build
+#[inline]
+pub fn list_compressors() -> Result<Vec<Codec>> {
+    let names = unsafe {
+        let ptr = ffi::blosc2_list_compressors();
+        CStr::from_ptr(ptr)
+            .to_str()
+            .map(ToString::to_string)
+            .map_err(|e| Error::Other(e.to_string()))
+    }?;
+
+    let mut compressors = vec![];
+    for name in names.split(',') {
+        compressors.push(Codec::try_from(name)?);
+    }
+    Ok(compressors)
 }
 
 /// Context interface to compression, does not require call to init/destroy. For
@@ -1781,6 +1806,19 @@ pub fn destroy() {
     unsafe { ffi::blosc2_destroy() }
 }
 
+/// Free possible memory temporaries and thread resources. Use this
+/// when you are not going to use Blosc for a long while.
+/// A 0 if succeeds, in case of problems releasing the resources,
+/// it returns a negative number.
+pub fn free_resources() -> Result<()> {
+    let ret = unsafe { ffi::blosc2_free_resources() };
+    if ret != 0 {
+        Err(Error::Blosc2(Blosc2Error::from(ret)))
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use ctor::{ctor, dtor};
@@ -1977,5 +2015,19 @@ mod tests {
         let info = get_complib_info(Codec::BloscLz)?;
         assert_eq!(&info, "BloscLZ: 2.5.3");
         Ok(())
+    }
+
+    #[test]
+    fn test_list_compressors() {
+        let compressors = list_compressors().unwrap();
+        for compressor in &[
+            Codec::BloscLz,
+            Codec::LZ4,
+            Codec::LZ4HC,
+            Codec::ZLIB,
+            Codec::ZSTD,
+        ] {
+            assert!(compressors.contains(compressor));
+        }
     }
 }

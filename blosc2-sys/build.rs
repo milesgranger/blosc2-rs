@@ -2,6 +2,9 @@ use std::path::Path;
 #[cfg(feature = "regenerate-bindings")]
 use std::path::PathBuf;
 
+#[cfg(feature = "use-system-blosc2")]
+const VENDORED_BLOSC2_VERSION: &'static str = "2.14.3";
+
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
 
@@ -81,12 +84,15 @@ fn main() {
             // Fall back to try and locate w/ pkg-config
             // TODO: 3rd option, just assume it's discoverable in the current environment?
             Err(_) => {
-                let lib = pkg_config::Config::new()
-                    .exactly_version("2.14.3")
-                    .probe("blosc2")
-                    .unwrap();
+                let lib = pkg_config::Config::new().probe("blosc2").unwrap();
                 for linkpath in lib.link_paths {
                     println!("cargo:rustc-link-search={}", linkpath.display());
+                }
+                if &lib.version != VENDORED_BLOSC2_VERSION {
+                    println!(
+                        r#"cargo::warning=blosc2 system version {} does not match vendored version {}, this is might be okay; if you experience problems check against vendored version."#,
+                        &lib.version, VENDORED_BLOSC2_VERSION
+                    )
                 }
             }
         }

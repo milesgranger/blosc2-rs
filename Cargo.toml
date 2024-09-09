@@ -1,6 +1,6 @@
 [package]
 name = "blosc2-rs"
-version = "0.4.0+2.15.1"
+version = "0.3.0+2.15.1"
 description = "Blosc2"
 license = "MIT"
 edition = "2021"
@@ -17,7 +17,7 @@ static = ["blosc2-sys/static"]
 shared = ["blosc2-sys/shared"]
 
 [dependencies]
-blosc2-sys = { path = "blosc2-sys", version = "0.4.0+2.15.1" }
+blosc2-sys = { path = "blosc2-sys", version = "0.3.0+2.15.1" }
 parking_lot = "^0.12"
 
 [dev-dependencies]

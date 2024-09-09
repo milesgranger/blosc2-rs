@@ -442,8 +442,10 @@ pub mod schunk {
     /// -------
     /// ```
     /// use std::io::Write;
-    /// use blosc2::{CParams, DParams};
+    /// use blosc2::{CParams, DParams, Blosc2Guard};
     /// use blosc2::schunk::{Storage, SChunk, Chunk};
+    ///
+    /// let _guard = Blosc2Guard::new();
     ///
     /// let input = b"some data";
     /// let storage = Storage::default()
@@ -1804,6 +1806,28 @@ pub fn init() {
 /// Call at end of using blosc2 library, unless you've never called `blosc2_init`
 pub fn destroy() {
     unsafe { ffi::blosc2_destroy() }
+}
+
+/// Call blosc2 init/destroy around the lifetime of this struct.
+///
+/// Effectively the same as calling `blosc2::init()` before your block of
+/// code and `blosc2::destroy()` after.
+///
+/// Create to initialize blosc2 library and when it goes out of scope,
+/// the destroy function is called.
+pub struct Blosc2Guard;
+
+impl Blosc2Guard {
+    /// Create a new guard, will call `blosc2::init` on creation and `blosc2::destroy` on drop.
+    pub fn new() -> Self {
+        init();
+        Self {}
+    }
+}
+impl Drop for Blosc2Guard {
+    fn drop(&mut self) {
+        destroy();
+    }
 }
 
 /// Free possible memory temporaries and thread resources. Use this

@@ -41,6 +41,9 @@ fn main() {
             .define("CMAKE_C_FLAGS", cmake_c_flags)
             .always_configure(true);
 
+        if cfg!(feature = "deactivate-zlib-optim") {
+            cmake_conf.define("WITH_ZLIB_OPTIM", "OFF");
+        }
         if cfg!(feature = "deactivate-zlib") {
             cmake_conf.define("DEACTIVATE_ZLIB", "ON");
         }

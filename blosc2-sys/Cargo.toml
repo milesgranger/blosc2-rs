@@ -25,15 +25,16 @@ default = []
 static  = []
 shared  = []
 
-use-system-blosc2    = ["dep:pkg-config"]
+use-system-blosc2     = ["dep:pkg-config"]
+deactivate-zlib-optim = []
 
-deactivate-zlib      = []
-prefer-external-zlib = []
+deactivate-zlib       = []
+prefer-external-zlib  = []
 
-deactivate-zstd      = []
-prefer-external-zstd = []
+deactivate-zstd       = []
+prefer-external-zstd  = []
 
-prefer-external-lz4  = []
+prefer-external-lz4   = []
 
 # Regenerate the bindings to c-blosc2 header
 regenerate-bindings = ["bindgen"]

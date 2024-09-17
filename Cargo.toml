@@ -1,6 +1,6 @@
 [package]
 name = "blosc2-rs"
-version = "0.3.0+2.15.1"
+version = "0.3.1+2.15.1"
 description = "Blosc2"
 license = "MIT"
 edition = "2021"
@@ -11,13 +11,18 @@ name = "blosc2"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
 default = ["shared"]
-use-system-blosc2 = ["blosc2-sys/use-system-blosc2"]
-regenerate-bindings = ["blosc2-sys/regenerate-bindings"]
-static = ["blosc2-sys/static"]
-shared = ["blosc2-sys/shared"]
+use-system-blosc2    = ["blosc2-sys/use-system-blosc2"]
+regenerate-bindings  = ["blosc2-sys/regenerate-bindings"]
+static               = ["blosc2-sys/static"]
+shared               = ["blosc2-sys/shared"]
+deactivate-zlib      = ["blosc2-sys/deactivate-zlib"]
+prefer-external-zlib = ["blosc2-sys/prefer-external-zlib"]
+deactivate-zstd      = ["blosc2-sys/deactivate-zstd"]
+prefer-external-zstd = ["blosc2-sys/prefer-external-zstd"]
+prefer-external-lz4  = ["blosc2-sys/prefer-external-lz4"]
 
 [dependencies]
-blosc2-sys = { path = "blosc2-sys", version = "0.3.0+2.15.1" }
+blosc2-sys = { path = "blosc2-sys", version = "0.3.1+2.15.1" }
 parking_lot = "^0.12"
 
 [dev-dependencies]

@@ -93,6 +93,25 @@ jobs:
       - name: Test
         run: cross test --target ${{ matrix.target }} --no-default-features --features static --release
 
+  test-wasm32-emscripten:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: wasm32-unknown-emscripten
+
+      - name: Install Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+
+      # TODO: Figure out why having zlib in build makes things sad.
+      - name: Build
+        run: cargo build --target wasm32-unknown-emscripten --features static,shared,deactivate-zlib
+
   test-native:
     runs-on: ${{ matrix.os }}
     strategy:

@@ -1,6 +1,6 @@
 [package]
 name = "blosc2-sys"
-version = "0.3.0+2.15.1"
+version = "0.3.1+2.15.1"
 edition = "2021"
 description = "Bindings to C Blosc2"
 license = "MIT"
@@ -22,11 +22,21 @@ libc = "^0.2"
 
 [features]
 default = []
-static = []
-shared = []
-use-system-blosc2 = ["dep:pkg-config"]
+static  = []
+shared  = []
 
-# Regenerate the bindings to c-blosc2 header, will require bindgen crate
+use-system-blosc2     = ["dep:pkg-config"]
+deactivate-zlib-optim = []
+
+deactivate-zlib       = []
+prefer-external-zlib  = []
+
+deactivate-zstd       = []
+prefer-external-zstd  = []
+
+prefer-external-lz4   = []
+
+# Regenerate the bindings to c-blosc2 header
 regenerate-bindings = ["bindgen"]
 
 [build-dependencies]

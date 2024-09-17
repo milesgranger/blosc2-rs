@@ -6,7 +6,7 @@ use std::path::PathBuf;
 const VENDORED_BLOSC2_VERSION: &'static str = "2.15.1";
 
 fn main() {
-    println!("cargo::rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=build.rs");
 
     // build blosc2 from source
     #[cfg(not(feature = "use-system-blosc2"))]
@@ -41,6 +41,24 @@ fn main() {
             .define("CMAKE_C_FLAGS", cmake_c_flags)
             .always_configure(true);
 
+        if cfg!(feature = "deactivate-zlib-optim") {
+            cmake_conf.define("WITH_ZLIB_OPTIM", "OFF");
+        }
+        if cfg!(feature = "deactivate-zlib") {
+            cmake_conf.define("DEACTIVATE_ZLIB", "ON");
+        }
+        if cfg!(feature = "prefer-external-zlib") {
+            cmake_conf.define("PREFER_EXTERNAL_ZLIB", "ON");
+        }
+        if cfg!(feature = "deactivate-zstd") {
+            cmake_conf.define("DEACTIVATE_ZSTD", "ON");
+        }
+        if cfg!(feature = "prefer-external-zstd") {
+            cmake_conf.define("PREFER_EXTERNAL_ZSTD", "ON");
+        }
+        if cfg!(feature = "prefer-external-lz4") {
+            cmake_conf.define("PREFER_EXTERNAL_LZ4", "ON");
+        }
         if cfg!(feature = "static") {
             cmake_conf.define("BUILD_STATIC", "ON");
         }

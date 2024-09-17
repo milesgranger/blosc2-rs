@@ -93,6 +93,28 @@ jobs:
       - name: Test
         run: cross test --target ${{ matrix.target }} --no-default-features --features static --release
 
+  test-wasm32-emscripten:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [static, shared]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: wasm32-unknown-emscripten
+
+      - name: Install Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+
+      - name: Build
+        run: cargo build --target wasm32-unknown-emscripten --no-default-features --features deactivate-zlib-optim --features ${{ matrix.build }}
+
   test-native:
     runs-on: ${{ matrix.os }}
     strategy:

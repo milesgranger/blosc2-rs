@@ -5,8 +5,12 @@ description = "Blosc2"
 license = "MIT"
 edition = "2021"
 exclude = [
+    ".gitignore",
+    ".gitmodules",
+    ".github/*",
     "benches/*",
     "data/*",
+    "environment.yml",
 ]
 
 [lib]

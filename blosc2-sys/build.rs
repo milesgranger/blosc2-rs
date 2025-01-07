@@ -3,7 +3,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 #[cfg(feature = "use-system-blosc2")]
-const VENDORED_BLOSC2_VERSION: &'static str = "2.15.1";
+const VENDORED_BLOSC2_VERSION: &'static str = "2.15.2";
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");

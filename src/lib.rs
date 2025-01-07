@@ -2029,7 +2029,7 @@ mod tests {
     #[test]
     fn test_get_version_string() -> Result<()> {
         let version = get_version_string()?;
-        assert_eq!(&version, "2.15.1");
+        assert_eq!(&version, "2.15.2");
         Ok(())
     }
 

@@ -1,9 +1,9 @@
 //! Blosc2 Rust bindings.
 
 use blosc2_sys as ffi;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use std::ffi::{c_void, CStr, CString};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::{io, mem};
 
 pub const BLOSC2_VERSION_DATE: &'static str =
@@ -13,6 +13,9 @@ pub const BLOSC2_VERSION_STRING: &'static str =
 pub use blosc2_sys::{
     BLOSC2_MAX_DIM, BLOSC2_VERSION_MAJOR, BLOSC2_VERSION_MINOR, BLOSC2_VERSION_RELEASE,
 };
+
+const BLOSC2_GUARD: OnceLock<Arc<Blosc2Guard>> = OnceLock::new();
+const BLOSC2_INIT_FLAG: OnceLock<Arc<Mutex<bool>>> = OnceLock::new();
 
 /// Result type used in this library
 pub type Result<T> = std::result::Result<T, Error>;
@@ -445,7 +448,7 @@ pub mod schunk {
     /// use blosc2::{CParams, DParams, Blosc2Guard};
     /// use blosc2::schunk::{Storage, SChunk, Chunk};
     ///
-    /// let _guard = Blosc2Guard::new();
+    /// let _guard = Blosc2Guard::get_or_init();
     ///
     /// let input = b"some data";
     /// let storage = Storage::default()
@@ -1799,31 +1802,58 @@ pub fn get_version_string() -> Result<String> {
 }
 
 /// Call before using blosc2, unless using specific ctx de/compression variants
+/// This is a safe wrapper to `blosc2_init` where a global `Arc<Mutex<bool>>` is used to track
+/// if blosc2 has already been initialized. For fine grained control use `init_unsafe` / `destroy_unsafe`
 pub fn init() {
+    let initd = BLOSC2_INIT_FLAG
+        .get_or_init(|| Arc::new(Mutex::new(false)))
+        .clone();
+    let mut guard = initd.lock();
+    if !*guard {
+        unsafe { init_unsafe() };
+        *guard = true;
+    }
+}
+
+/// Call before using blosc2, unless using specific ctx de/compression variants
+/// For a safe interface managing the singleton nature of this call, use `init`/`destroy` functions.
+pub unsafe fn init_unsafe() {
     unsafe { ffi::blosc2_init() }
 }
 
 /// Call at end of using blosc2 library, unless you've never called `blosc2_init`
+/// This is a safe wrapper to `blosc2_destroy` where a global `Arc<Mutex<bool>>` is used to track
+/// if blosc2 has already been destroyed. For fine grained control use `init_unsafe` / `destroy_unsafe`
 pub fn destroy() {
-    unsafe { ffi::blosc2_destroy() }
+    let initd = BLOSC2_INIT_FLAG
+        .get_or_init(|| Arc::new(Mutex::new(false)))
+        .clone();
+    let mut guard = initd.lock();
+    if *guard {
+        unsafe { destroy_unsafe() };
+        *guard = false;
+    }
 }
 
-/// Call blosc2 init/destroy around the lifetime of this struct.
-///
-/// Effectively the same as calling `blosc2::init()` before your block of
-/// code and `blosc2::destroy()` after.
-///
-/// Create to initialize blosc2 library and when it goes out of scope,
-/// the destroy function is called.
+/// Call at end of using blosc2 library, unless you've never called `blosc2_init`
+/// For a safe interface managing the singleton nature of this call, use `init`/`destroy` functions.
+pub unsafe fn destroy_unsafe() {
+    unsafe { ffi::blosc2_destroy() };
+}
+
+/// Singleton struct for initializing blosc2 and auto destroying it when going out of scope.
+/// **Note**: if you create more than one of these, the *last* one dropped will cause a call to `blosc2_destroy`
 pub struct Blosc2Guard;
 
 impl Blosc2Guard {
-    /// Create a new guard, will call `blosc2::init` on creation and `blosc2::destroy` on drop.
-    pub fn new() -> Self {
+    /// Get or create the blosc2 initialization guard. If blosc2's init has already been called this
+    /// will return the existing singleton otherwise will call init and return the singleton.
+    pub fn get_or_init() -> Arc<Self> {
         init();
-        Self {}
+        BLOSC2_GUARD.get_or_init(|| Arc::new(Self {})).clone()
     }
 }
+
 impl Drop for Blosc2Guard {
     fn drop(&mut self) {
         destroy();

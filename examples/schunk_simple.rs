@@ -6,7 +6,7 @@ const NCHUNKS: usize = 100;
 const NTHREADS: usize = 4;
 
 fn main() {
-    blosc2::init();
+    let _blosc2_guard = blosc2::Blosc2Guard::get_or_init();
 
     let mut data = vec![0_i32; CHUNKSIZE];
     let mut data_dest = vec![0_i32; CHUNKSIZE];
@@ -78,6 +78,4 @@ fn main() {
             );
         }
     }
-
-    blosc2::destroy();
 }

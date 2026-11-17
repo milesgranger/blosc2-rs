@@ -29,8 +29,8 @@ jobs:
       - uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: 3.12
-          mamba-version: "1.5.12-0"
-          channels: conda-forge,defaults
+          channels: conda-forge
+          conda-remove-defaults: "true"
           channel-priority: true
           activate-environment: blosc2
           environment-file: environment.yml
@@ -121,7 +121,7 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - macos-13  # x86_64
+          - macos-15-intel  # x86_64
           - macos-14  # M1
           - windows-latest
           - ubuntu-latest

@@ -1,12 +1,17 @@
 use std::path::Path;
-#[cfg(feature = "regenerate-bindings")]
+#[allow(unused_imports)]
 use std::path::PathBuf;
 
 #[cfg(feature = "use-system-blosc2")]
-const VENDORED_BLOSC2_VERSION: &'static str = "2.15.1";
+const VENDORED_BLOSC2_VERSION: &'static str = "2.15.2";
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+
+    // Include directories of the blosc2 headers the bindings are generated from
+    // (only filled when using a system blosc2)
+    #[allow(unused_mut, unused_variables)]
+    let mut include_dirs: Vec<PathBuf> = Vec::new();
 
     // build blosc2 from source
     #[cfg(not(feature = "use-system-blosc2"))]
@@ -97,6 +102,7 @@ fn main() {
                     let search_path = install_path.join(subdir);
                     println!("cargo:rustc-link-search={}", search_path.display());
                 }
+                include_dirs.push(install_path.join("include"));
             }
 
             // Fall back to try and locate w/ pkg-config
@@ -106,6 +112,7 @@ fn main() {
                 for linkpath in lib.link_paths {
                     println!("cargo:rustc-link-search={}", linkpath.display());
                 }
+                include_dirs.extend(lib.include_paths);
                 if &lib.version != VENDORED_BLOSC2_VERSION {
                     println!(
                         r#"cargo::warning=blosc2 system version {} does not match vendored version {}, this is might be okay; if you experience problems check against vendored version."#,
@@ -132,10 +139,21 @@ fn main() {
     #[cfg(feature = "regenerate-bindings")]
     {
         let out = PathBuf::from(&(format!("{}/bindings.rs", std::env::var("OUT_DIR").unwrap())));
-        bindgen::Builder::default()
-            // The input header we would like to generate
-            // bindings for.
-            .header("c-blosc2/include/blosc2.h")
+
+        // With use-system-blosc2 the bindings must match the headers of the
+        // library we link against, not the vendored ones.
+        if cfg!(not(feature = "use-system-blosc2")) {
+            include_dirs.push(PathBuf::from("c-blosc2/include"));
+        }
+        let clang_args: Vec<String> = include_dirs
+            .iter()
+            .map(|dir| format!("-I{}", dir.display()))
+            .collect();
+
+        let bindings = bindgen::Builder::default()
+            // The input headers we would like to generate bindings for.
+            .header_contents("wrapper.h", "#include <blosc2.h>\n#include <b2nd.h>\n")
+            .clang_args(clang_args)
             // Tell cargo to invalidate the built crate whenever any of the
             // included header files changed.
             .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
@@ -146,6 +164,7 @@ fn main() {
             .allowlist_type(".*blosc2.*")
             .allowlist_function(".*blosc.*")
             .allowlist_var(".*BLOSC.*")
+            .allowlist_var("B2ND_MAX_DIM")
             // Replaced by libc::FILE
             .blocklist_type("FILE")
             .blocklist_type("_IO_FILE")
@@ -166,7 +185,16 @@ fn main() {
             .no_default("blosc2_[c|d]params")
             .generate()
             .expect("Unable to generate bindings")
-            .write_to_file(out)
-            .unwrap();
+            .to_string();
+
+        // c-blosc2 3.x dropped BLOSC2_MAX_DIM in favour of B2ND_MAX_DIM;
+        // keep the old name available.
+        let mut bindings = bindings;
+        if !bindings.contains("pub const BLOSC2_MAX_DIM:")
+            && bindings.contains("pub const B2ND_MAX_DIM:")
+        {
+            bindings.push_str("pub const BLOSC2_MAX_DIM: u32 = B2ND_MAX_DIM;\n");
+        }
+        std::fs::write(out, bindings).unwrap();
     }
 }

@@ -2059,7 +2059,11 @@ mod tests {
     #[test]
     fn test_get_version_string() -> Result<()> {
         let version = get_version_string()?;
-        assert_eq!(&version, "2.15.1");
+        let expected = format!(
+            "{}.{}.{}",
+            BLOSC2_VERSION_MAJOR, BLOSC2_VERSION_MINOR, BLOSC2_VERSION_RELEASE
+        );
+        assert_eq!(version, expected);
         Ok(())
     }
 
